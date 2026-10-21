@@ -1,0 +1,12 @@
+PARA O AGENTE MARITIMO — LEIA ISTE
+
+1. Abra a ficha "ficha_anuncio_navio.xlsx" (esta na pasta do projeto).
+2. Preencha SOMENTE as celulas claras. Nao precisa saber codigo de nada:
+   escreva os NOMES (agencia, armador, operador, portos e a mercadoria).
+3. Salve o arquivo (Ctrl+S) e copie/cole para ESTA pasta (entrada).
+4. Pronto. O robo le a ficha, resolve os codigos e a numeracao da viagem,
+   e faz o anuncio sozinho. Nao precisa falar com ninguem.
+
+A ficha que ja foi processada sai daqui e vai para a pasta "processados".
+Se faltar algum dado, ela vai para a pasta "erro" e o motivo fica no arquivo
+.log.txt do lado — nesse caso, corrija a ficha e mande de novo.

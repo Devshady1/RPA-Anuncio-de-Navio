@@ -1,0 +1,27 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+logs/
+screenshots/
+# relatorios: so o EXECUTIVO e versionado (registro do primeiro anuncio).
+# `relatorios/*` (e nao `relatorios/`) porque git nao consegue re-incluir
+# arquivo dentro de diretorio excluido.
+relatorios/*
+!relatorios/RELATORIO_EXECUTIVO_*.pdf
+dados_rpa/processados/
+dados_rpa/erro/
+dados_rpa/duplicados/
+dados_rpa/pdfs/
+data/*
+!data/status.json
+!data/sequencia.json
+
+# fichas dos agentes: dados operacionais, nao vao para o repositorio
+entrada/*.xlsx
+entrada/.processando/
+entrada/processados/
+entrada/erro/
+
+# workspace do superpowers (ledger e briefs): rascunho descartavel
+.superpowers/
