@@ -18,8 +18,11 @@ class TestNormalizar(unittest.TestCase):
 
 class TestConsultas(unittest.TestCase):
     def test_termo_simples_gera_prefixos_decrescentes(self):
+        # Depois da busca pela descricao vem a busca pelo CODIGO (palavra unica
+        # pode ser codigo: porto 'BRIOS') e so entao os prefixos da descricao.
         self.assertEqual(lookup_engine.consultas("MARINAV"),
-                         [("descricao", "MARINAV"), ("descricao", "MARINA"),
+                         [("descricao", "MARINAV"), ("codigo", "MARINAV"),
+                          ("descricao", "MARINA"),
                           ("descricao", "MARIN"), ("descricao", "MARI")])
 
     def test_preserva_acento_no_termo(self):
@@ -119,6 +122,48 @@ class TestEscolher(unittest.TestCase):
             "BERÇO 101", [["", "101", "BERÇO 101", "1", "1", "CAIS COMERCIAL"]], berco)
         self.assertEqual(idx, 0)
         self.assertEqual(cands[0]["descricao"], "BERÇO 101")
+
+
+class TestTermoQueEhCodigo(unittest.TestCase):
+    """A ficha do agente traz codigo em varios campos (porto, agencia...)."""
+
+    def setUp(self):
+        self.armador = next(c for c in lookup_engine.CAMPOS if c.chave == "armador")
+        self.porto = next(c for c in lookup_engine.CAMPOS if c.chave == "porto_ant")
+
+    def test_escolhe_a_linha_pelo_codigo(self):
+        linhas = [["", "30010", "MARINAV"], ["", "30002", "INTERMARIT"]]
+        idx, cands = lookup_engine.escolher("30010", linhas, self.armador)
+        self.assertEqual(idx, 0)
+        self.assertEqual(cands[0]["codigo"], "30010")
+
+    def test_escolhe_a_linha_pelo_codigo_com_nome(self):
+        linhas = [["", "30010", "MARINAV"]]
+        idx, _ = lookup_engine.escolher("30010 - MARINAV", linhas, self.armador)
+        self.assertEqual(idx, 0)
+
+    def test_escolhe_a_linha_pelo_codigo_do_porto(self):
+        linhas = [["", "BRIOS", "ILHEUS"]]
+        idx, cands = lookup_engine.escolher("BRIOS", linhas, self.porto)
+        self.assertEqual(idx, 0)
+        self.assertEqual(cands[0]["descricao"], "ILHEUS")
+
+    def test_codigo_igual_em_duas_linhas_nao_adivinha(self):
+        linhas = [["", "30010", "MARINAV"], ["", "30010", "MARINAV LTDA"]]
+        idx, cands = lookup_engine.escolher("30010", linhas, self.armador)
+        self.assertIsNone(idx)
+        self.assertEqual(len(cands), 2)
+
+    def test_consulta_pelo_codigo_de_termo_de_uma_palavra(self):
+        self.assertIn(("codigo", "BRIOS"), lookup_engine.consultas("BRIOS"))
+
+    def test_consulta_pelo_codigo_vem_depois_da_descricao(self):
+        seq = lookup_engine.consultas("BRIOS")
+        self.assertLess(seq.index(("descricao", "BRIOS")), seq.index(("codigo", "BRIOS")))
+
+    def test_nome_com_espaco_nao_vira_consulta_por_codigo(self):
+        seq = lookup_engine.consultas("AMELIA NAVIGATION")
+        self.assertNotIn(("codigo", "AMELIA NAVIGATION"), seq)
 
 
 class TestCampos(unittest.TestCase):

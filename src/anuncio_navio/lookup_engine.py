@@ -162,6 +162,10 @@ def consultas(termo: str, minimo: int = 4, limite: int = 6) -> list[tuple[str, s
         seq.append(("descricao", bruto))
     if codigo is not None:
         seq.append(("codigo", codigo))
+    elif " " not in bruto:
+        # Palavra unica pode ser CODIGO (porto 'BRIOS', agencia '30010'):
+        # a busca por descricao nao acha nada e o filtro de codigo acha.
+        seq.append(("codigo", bruto))
 
     if codigo is not None:
         base, campo_base = codigo, "codigo"
@@ -200,6 +204,23 @@ def pontuar(termo: str, descricao: str) -> float:
     return 0.0
 
 
+def _termos_codigo(termo: str) -> list[str]:
+    """Termos que podem casar com a COLUNA DE CODIGO da grade.
+
+    '30010 - MARINAV' -> ['30010'] (o nome e a parte depois do separador).
+    'BRIOS' -> ['BRIOS'] (palavra unica: pode ser codigo de porto).
+    'AMELIA NAVIGATION' -> [] (nome com espaco nao e codigo).
+    """
+    bruto = str(termo or "").strip()
+    saida: list[str] = []
+    achado = _SEPARADORES.match(bruto)
+    if achado and achado.group(1) != bruto:
+        saida.append(achado.group(1))
+    if " " not in bruto and bruto:
+        saida.append(bruto)
+    return saida
+
+
 def _celula(linha: list[str], indice: int) -> str:
     if 0 <= indice < len(linha):
         return str(linha[indice]).strip()
@@ -210,6 +231,10 @@ def escolher(termo: str, linhas: list[list[str]],
              campo: CampoLookup) -> tuple[int | None, list[dict]]:
     """Escolhe a linha da grade que casa com o termo.
 
+    Casa pela descricao E pelo codigo: a ficha do agente vem com codigo em
+    varios campos (porto 'BRIOS', agencia '30010'), e a grade traz o codigo
+    na coluna 1.
+
     Devolve (indice_da_linha | None, candidatos). O indice e None quando nao
     ha resultado, quando o melhor casamento e fraco, ou quando dois cadastros
     empatam: nesses casos quem decide e quem opera.
@@ -217,15 +242,21 @@ def escolher(termo: str, linhas: list[list[str]],
     if not linhas:
         return None, []
 
+    termos_codigo = _termos_codigo(termo)
     pares: list[tuple[int, dict]] = []
     for indice, linha in enumerate(linhas):
         codigo = _celula(linha, campo.col_codigo)
-        melhor_descricao, melhor_score = "", 0.0
+        melhor_descricao, score_desc = "", -1.0
         for col in campo.cols_descricao:
             descricao = _celula(linha, col)
             score = pontuar(termo, descricao)
+            if score > score_desc:
+                melhor_descricao, score_desc = descricao, score
+        melhor_score = max(score_desc, 0.0)
+        for t in termos_codigo:
+            score = pontuar(t, codigo)
             if score > melhor_score:
-                melhor_descricao, melhor_score = descricao, score
+                melhor_score = score
         pares.append((indice, {
             "codigo": codigo,
             "descricao": melhor_descricao,
