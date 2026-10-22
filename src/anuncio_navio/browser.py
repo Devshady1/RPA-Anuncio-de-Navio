@@ -10,6 +10,15 @@ from . import lookup_engine
 
 logger = logging.getLogger("anuncio.browser")
 
+
+class FalhaPopup(RuntimeError):
+    """Falha TECNICA no popup de consulta (nao e "nao encontrado").
+
+    Quando o popup nao abre ou a grade/filtro nao podem ser lidos, nao da
+    para saber se o cadastro existe. Devolver "nao encontrado" aqui faria o
+    anuncio cair calado no CSV velho - o certo e a rodada falhar e repetir.
+    """
+
 _BLOQUEIO = """() => {
   if (window.__rpaBloq) return; window.__rpaBloq = true;
   ["mousedown","mouseup","click","dblclick","mousemove","contextmenu","wheel"].forEach(n =>
@@ -320,8 +329,7 @@ def _popup_filtrar(popup: Page, campo, campo_filtro: str, termo: str) -> list[li
     try:
         popup.locator("#" + alvo_id).first.fill(termo)
     except Exception as e:
-        logger.warning(f"  {campo.rotulo}: filtro {alvo_id} nao encontrado ({type(e).__name__}).")
-        return []
+        raise FalhaPopup(f"filtro {alvo_id} nao encontrado ({type(e).__name__})") from e
 
     with contextlib.suppress(Exception):
         popup.locator("#BPESQUISAR").first.evaluate("el => el.click()")
@@ -329,8 +337,7 @@ def _popup_filtrar(popup: Page, campo, campo_filtro: str, termo: str) -> list[li
     try:
         return _ler_grade(popup)
     except Exception as e:
-        logger.warning(f"  {campo.rotulo}: grade ilegivel ({type(e).__name__}: {e}).")
-        return []
+        raise FalhaPopup(f"grade ilegivel ({type(e).__name__}: {e})") from e
 
 
 def _popup_esperar_fechar(popup: Page, limite_ms: int = 8000) -> bool:
@@ -369,9 +376,8 @@ def resolver_lookup_popup(page: Page, campo, termo: str) -> tuple[bool, list[dic
         with page.expect_popup(timeout=12000) as pop_info:
             botao.evaluate("el => el.click()")
         popup = pop_info.value
-    except Exception:
-        logger.warning(f"  {campo.rotulo}: popup de consulta nao abriu.")
-        return False, []
+    except Exception as e:
+        raise FalhaPopup(f"popup de consulta nao abriu ({type(e).__name__})") from e
 
     try:
         popup.set_default_timeout(15000)
@@ -422,6 +428,12 @@ def resolver_lookup_popup(page: Page, campo, termo: str) -> tuple[bool, list[dic
 
         logger.warning(f"  {campo.rotulo} '{termo}': nenhum resultado no popup.")
         return False, candidatos
+    except FalhaPopup:
+        raise
+    except Exception as e:
+        # Erro de biblioteca (ex. TargetClosedError) nao pode escapar crua: a
+        # rodada perderia o registro de erro e o anuncio nao seria retomavel.
+        raise FalhaPopup(f"{type(e).__name__}: {e}") from e
     finally:
         with contextlib.suppress(Exception):
             if not popup.is_closed():

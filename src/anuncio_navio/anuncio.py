@@ -112,7 +112,14 @@ def criar_anuncio(page, config, d: dict) -> str:
     # nao conhece o cadastro.
     pend = []
     for campo, termo, codigo_fallback in _campos_lookup(d):
-        ok, cands = browser.resolver_lookup_popup(page, campo, termo)
+        try:
+            ok, cands = browser.resolver_lookup_popup(page, campo, termo)
+        except browser.FalhaPopup as e:
+            # Popup quebrado NAO e "cadastro nao existe": usar o CSV velho
+            # aqui publicaria o anuncio com dado que nao da para conferir.
+            logger.error(f"  {campo.rotulo}: falha tecnica no popup ({e}).")
+            pend.append(f"{campo.rotulo} '{termo}': falha tecnica no popup ({e})")
+            continue
         if not ok and _usar_fallback(cands, codigo_fallback):
             logger.info(f"  {campo.rotulo}: popup nao achou '{termo}', usando o codigo local {codigo_fallback}.")
             ok = browser.preencher_lookup(page, campo.seletor_visivel, campo.seletor_hidden,
