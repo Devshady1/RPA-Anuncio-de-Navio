@@ -119,5 +119,33 @@ class TestLookupsPreservamTexto(unittest.TestCase):
         self.assertEqual(campos["berco"], "BERÇO 101")
 
 
+class TestCelulasExcel(unittest.TestCase):
+    MODELO = Path(__file__).resolve().parents[1] / "src" / "anuncio_navio" / "recursos" / "ficha_modelo.xlsx"
+
+    def test_data_hora_e_numeros(self):
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+
+        import openpyxl
+
+        with TemporaryDirectory() as t:
+            p = Path(t) / "ficha.xlsx"
+            wb = openpyxl.load_workbook(self.MODELO)
+            ws = wb["Anúncio"]
+            ws["C6"], ws["C7"] = "VOYAGER", "9553256"
+            ws["C12"] = datetime(2026, 11, 28, 7, 30)
+            ws["C19"] = "MIUDEZAS COMESTIVEIS"
+            ws["C20"] = 1000.0
+            ws["C22"], ws["D22"] = 8.3, 8.3
+            wb.save(p)
+            campos = planilha.ler_planilha(p)
+
+        self.assertEqual(campos["eta_data"], "28/11/2026")
+        self.assertEqual(campos["eta_hora"], "07:30")
+        self.assertEqual(campos["qtd"], "1000")
+        self.assertEqual(campos["calado_cheg_proa"], "8,3")
+
+
 if __name__ == "__main__":
     unittest.main()

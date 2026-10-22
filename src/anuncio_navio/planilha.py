@@ -12,6 +12,7 @@ Uso:
 from __future__ import annotations
 
 import re
+from datetime import date, datetime, time
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -199,6 +200,18 @@ def _normalizar_rotulo(txt: object) -> str:
 def _texto(valor: object) -> str:
     if valor is None:
         return ""
+    # O Excel entrega data/hora e numero como objetos nativos; a ficha (e o
+    # OpenPort) esperam DD/MM/AAAA, HH:MM e numero com virgula.
+    if isinstance(valor, datetime):
+        return valor.strftime("%d/%m/%Y")
+    if isinstance(valor, date):
+        return valor.strftime("%d/%m/%Y")
+    if isinstance(valor, time):
+        return valor.strftime("%H:%M")
+    if isinstance(valor, float):
+        if valor.is_integer():
+            return str(int(valor))
+        return f"{valor:g}".replace(".", ",")
     return str(valor).strip()
 
 
@@ -253,6 +266,11 @@ def _ler_aba(wb, aba: str, p: Path) -> dict:
             k1, k2 = DUPLOS[norm]
             campos[k1] = _texto(v1)
             campos[k2] = _texto(v2)
+            # Data e hora na mesma celula (ETA/ETB/ETC/ETS): abre em data na
+            # coluna 1 e hora na coluna 2, como a ficha pede.
+            if isinstance(v1, datetime) and not campos[k2]:
+                campos[k1] = v1.strftime("%d/%m/%Y")
+                campos[k2] = v1.strftime("%H:%M")
             continue
 
         # Carga: o agente escreve o NOME da mercadoria. O texto vai intacto
