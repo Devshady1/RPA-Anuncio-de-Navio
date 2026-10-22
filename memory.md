@@ -396,8 +396,12 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   `fila_json.normalizar`), senao ele morre no caminho planilha -> fila.
 - **Provas**: `tests/test_lookup_qas.py` (7 nomes + 3 codigos no QAS vivo) e
   `tests/test_anuncio_qas.py` (fluxo completo a partir de nomes, **sem gravar**).
-- **Pendente**: os ids dos popups foram medidos no **QAS**; a leitura de tela no
-  **PROD** precisa ser repetida antes de promover (spec, risco 5).
+- **Ids conferidos em PROD (22/10/2026, read-only)**: os 8 popups abrem com os
+  mesmos ids do QAS (`sqlFiltroDescricao`/`sqlNOM_FANTASIA`/`sqlDCR_*`,
+  `sqlCOD_*`/`SqlCOD_EMPRESA`, `#BPESQUISAR`, `table#TQuery`, link
+  `QueryValor`) e as mesmas colunas; termo e codigo batem (BRIOS, BRSSZ, 60700
+  AMELIA NAVIGATION, 60210 AEC SHIPPING, 30010 MARINAV, 101 BERCO 101, 30002
+  INTERMARIT, 02061000 MIUDEZAS COMESTIVEIS). Risco 5 da spec: fechado.
 
 ### 2026-10-22 — correcoes da revisao (antes do merge da fase 1)
 
@@ -421,4 +425,7 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   encontrado" e o anuncio caia calado no CSV velho.
 - **"sem paginacao"**: com a caixa MARCADA a grade vem inteira (o teste vivo
   `test_filtro_traz_a_lista_inteira_sem_paginacao` confirma >100 linhas).
+- **Merge + tag**: `feat/motor-lookups-popup` mergeada em `master` (fast-forward,
+  17 commits) e a fase tagueada `v0.1.0-fase1`. PROD conferido read-only antes:
+  nenhum id divergiu do QAS.
 
