@@ -167,13 +167,10 @@ def criar_anuncio(page, config, d: dict) -> str:
 
     # Passo final opcional: CONFIRMAR o anuncio (finaliza no OpenPort).
     # Exige CONFIRMAR_ANUNCIO=1; sem ela, para no Verificar (rascunho p/ auditoria).
-    # Ordem: Verificar invalida o save -> REGRAVA antes de confirmar (evita 500021).
+    # NAO regravar aqui: o Verificar deixa o anuncio em status Elaborado e o
+    # OpenPort recusa qualquer alteracao (200301) - medido no QAS em 22/10/2026.
+    # O Confirmar funciona direto, sem gravar de novo.
     if os.environ.get("CONFIRMAR_ANUNCIO") == "1":
-        logger.info("Regravando antes de confirmar...")
-        browser.acionar(page, c["btn_gravar"])
-        with contextlib.suppress(Exception):
-            page.wait_for_load_state("networkidle")
-        browser.esperar(page, 2500)
         logger.info("Confirmando anuncio (CONFIRMAR_ANUNCIO=1)...")
         if _clicar_confirmar(page, config):
             with contextlib.suppress(Exception):
