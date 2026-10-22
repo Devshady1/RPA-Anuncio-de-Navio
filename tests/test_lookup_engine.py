@@ -97,6 +97,29 @@ class TestEscolher(unittest.TestCase):
             "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS", linhas, self.carga)
         self.assertEqual(idx, 0)
 
+    def test_carga_usa_o_indice_da_mercadoria_completa(self):
+        # Grade medida no QAS: ["", cod, "Descricao Resumida", "Cod Grupo",
+        # "Grupo Mercadoria", "Mercadoria", "", ""]. A mercadoria completa esta
+        # no indice 5, nao no 6.
+        linha = ["", "02061000", "MIUDEZAS COMESTIVEIS", "2",
+                 "CARNES E MIUDEZAS, COMESTIVEIS.",
+                 "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS", "", ""]
+        self.assertEqual(self.carga.cols_descricao, (2, 5))
+        idx, cands = lookup_engine.escolher(
+            "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS", [linha], self.carga)
+        self.assertEqual(idx, 0)
+        self.assertEqual(cands[0]["descricao"],
+                         "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS")
+
+    def test_berco_descreve_pelo_nome_do_berco(self):
+        # Grade medida no QAS: ["", cod, "BERCO 101", "1", "1", "CAIS COMERCIAL"].
+        berco = next(c for c in lookup_engine.CAMPOS if c.chave == "berco")
+        self.assertEqual(berco.cols_descricao, (2,))
+        idx, cands = lookup_engine.escolher(
+            "BERÇO 101", [["", "101", "BERÇO 101", "1", "1", "CAIS COMERCIAL"]], berco)
+        self.assertEqual(idx, 0)
+        self.assertEqual(cands[0]["descricao"], "BERÇO 101")
+
 
 class TestCampos(unittest.TestCase):
     def test_oito_campos_na_ordem_do_bloco_3(self):

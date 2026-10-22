@@ -101,7 +101,7 @@ CAMPOS: tuple[CampoLookup, ...] = (
         filtro_descricao="sqlDCR_BERCO",
         filtro_codigo="sqlCOD_BERCO",
         col_codigo=1,
-        cols_descricao=(2, 6),
+        cols_descricao=(2,),
     ),
     CampoLookup(
         chave="operador",
@@ -123,7 +123,7 @@ CAMPOS: tuple[CampoLookup, ...] = (
         filtro_descricao="sqlDCR_TIP_MERCAD",
         filtro_codigo="sqlCOD_TIP_MERCAD",
         col_codigo=1,
-        cols_descricao=(2, 6),
+        cols_descricao=(2, 5),
     ),
 )
 
