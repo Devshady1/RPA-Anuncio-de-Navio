@@ -36,6 +36,24 @@ class TestConsultas(unittest.TestCase):
         self.assertEqual(lookup_engine.consultas("RIO"),
                          [("descricao", "RIO"), ("codigo", "RIO")])
 
+    def test_nome_longo_degrada_por_palavra(self):
+        # Medido no QAS: a descricao resumida da carga e o COMECO da
+        # mercadoria completa ("MIUDEZAS COMESTIVEIS"). Truncar caractere a
+        # caractere de "...BOVINO,FRESCAS" nunca chega nela.
+        seq = lookup_engine.consultas(
+            "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS")
+        self.assertIn(("descricao", "MIUDEZAS COMESTIVEIS"), seq)
+
+    def test_nome_longo_tenta_as_fronteiras_de_palavra_antes_dos_caracteres(self):
+        seq = lookup_engine.consultas("MINERIOS DE NIQUEL E SEUS CONCENTRADOS")
+        self.assertIn(("descricao", "MINERIOS DE NIQUEL"), seq)
+        self.assertLess(seq.index(("descricao", "MINERIOS DE NIQUEL E SEUS")),
+                        seq.index(("descricao", "MINERIOS DE NIQUEL")))
+
+    def test_nao_consulta_termo_com_espaco_no_fim(self):
+        seq = lookup_engine.consultas("MINERIOS DE NIQUEL E SEUS CONCENTRADOS")
+        self.assertFalse([t for _, t in seq if t != t.strip()])
+
     def test_preserva_acento_no_termo(self):
         self.assertEqual(lookup_engine.consultas("Ilhéus")[0], ("descricao", "Ilhéus"))
 

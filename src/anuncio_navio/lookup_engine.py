@@ -137,7 +137,7 @@ def normalizar(txt: str) -> str:
     return re.sub(r"\s+", " ", limpo).strip().upper()
 
 
-def consultas(termo: str, minimo: int = 3, limite: int = 6) -> list[tuple[str, str]]:
+def consultas(termo: str, minimo: int = 3, limite: int = 8) -> list[tuple[str, str]]:
     """Consultas a tentar no popup, em ordem: (campo_filtro, termo).
 
     campo_filtro e "descricao" ou "codigo". O texto do operador sempre vem
@@ -173,13 +173,21 @@ def consultas(termo: str, minimo: int = 3, limite: int = 6) -> list[tuple[str, s
 
     if codigo is not None:
         base, campo_base = codigo, "codigo"
-    elif " " in bruto:
-        base, campo_base = bruto.rsplit(" ", 1)[0], "descricao"
     else:
         base, campo_base = bruto, "descricao"
-    seq.append((campo_base, base))
-    for tamanho in range(len(base) - 1, minimo - 1, -1):
-        seq.append((campo_base, base[:tamanho]))
+
+    # O cadastro guarda a descricao CURTA (ex. "MIUDEZAS COMESTIVEIS") e o
+    # nome completo (a mercadoria inteira). A curta quase sempre e o comeco
+    # do nome, entao a degradacao desce por FRONTEIRA DE PALAVRA antes de
+    # truncar caractere - truncar "...BOVINO,FRESCAS" nunca chega na curta.
+    palavras = base.split(" ")
+    for n in range(len(palavras) - 1, 0, -1):
+        prefixo = " ".join(palavras[:n])
+        if len(prefixo) >= minimo:
+            seq.append((campo_base, prefixo))
+    menor = palavras[0]
+    for tamanho in range(len(menor) - 1, minimo - 1, -1):
+        seq.append((campo_base, menor[:tamanho]))
 
     vistos: set[tuple[str, str]] = set()
     saida: list[tuple[str, str]] = []
