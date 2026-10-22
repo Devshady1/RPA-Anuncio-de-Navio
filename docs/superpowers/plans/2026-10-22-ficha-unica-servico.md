@@ -620,8 +620,12 @@ class TestProcessar(unittest.TestCase):
     def test_sucesso_arquiva_e_gera_nova(self):
         with TemporaryDirectory() as t:
             root = self._root_preenchido(t)
+            cfg = self._cfg(root)
             avisos = []
-            r = servico.processar(root, self._cfg(root), executar=lambda c, d: "000010",
+            def anunciar(c, d):
+                status.marcar_ok(c, d, "000010")   # executar_um real faz isso
+                return "000010"
+            r = servico.processar(root, cfg, executar=anunciar,
                                   notificar_fn=lambda ti, tx: avisos.append((ti, tx)))
             self.assertEqual(r.estado, "ok")
             self.assertEqual(r.duv, "000010")
@@ -656,8 +660,12 @@ class TestProcessar(unittest.TestCase):
     def test_duplicado_por_conteudo_nao_chama_o_robo(self):
         with TemporaryDirectory() as t:
             root = self._root_preenchido(t)
+            cfg = self._cfg(root)
             chamou = []
-            servico.processar(root, self._cfg(root), executar=lambda c, d: "000010",
+            def anunciar(c, d):
+                status.marcar_ok(c, d, "000010")
+                return "000010"
+            servico.processar(root, cfg, executar=anunciar,
                               notificar_fn=lambda ti, tx: None)
             # simula a ficha antiga (ja arquivada) re-salva por cima da nova
             arquivada = next((root / "ficha" / "arquivo").glob("*.xlsx"))
@@ -695,13 +703,14 @@ Expected: FAIL `ModuleNotFoundError: anuncio_navio.servico`
 Ordem exata do ciclo:
 
 1. `p = caminhos.ficha(root)`; se não existe → `ficha.gerar_nova(root)` e `Resultado("sem_ficha")`.
-2. `not ficha.esta_livre(p)` → `Resultado("ocupada")` (sem notificar; o loop notifica uma vez).
-3. `ficha.ja_tentada(root, p)` → `Resultado("sem_novidade")`.
+2. `ficha.ja_tentada(root, p)` → `Resultado("sem_novidade")` (**antes** de `esta_livre`: a ficha que
+   o robô acabou de escrever tem `mtime` novo e não pode virar "ocupada").
+3. `not ficha.esta_livre(p)` → `Resultado("ocupada")` (sem notificar; o loop notifica uma vez).
 4. `campos, pendencias = ficha.ler(root)`; se pendencias → `ficha.escrever_status(mensagem)`,
-   `historico.registrar(...resultado="FALHOU")`, `ficha.marcar_estado`, notifica falha,
-   `Resultado("invalida", msg)`.
+   histórico `FALHOU`, `ficha.marcar_estado` (depois da escrita), notifica falha,
+   `Resultado(estado="invalida", mensagem=msg)`.
 5. `payload = planilha.construir_payload(campos)`; `dup = status.mesmo_anuncio(cfg, payload)`;
-   se `dup` → arquiva (`duv=dup`), `gerar_nova`, histórico `JÁ ANUNCIADO`, `marcar_estado` na ficha
+   se `dup` → arquiva (`duv=dup`), histórico `JÁ ANUNCIADO`, `gerar_nova`, `marcar_estado` na ficha
    nova, notifica duplicado, `Resultado(estado="duplicado", duv=dup)`.
 6. `payload["viagem"] = sequencia.proxima(root)`; `arquivo = caminhos.json_dir(root)/f"{imo}_{viagem}.json"` gravado com `json.dumps(payload, ensure_ascii=False, indent=2)`;
    `dados = fila_json.carregar_anuncio(arquivo)`.
@@ -710,10 +719,11 @@ Ordem exata do ciclo:
    - `Exception` → mensagem genérica com a primeira linha.
    Em qualquer exceção: `fila_json.finalizar_erro(arquivo, erro)`, `escrever_status`, histórico
    `FALHOU`, `marcar_estado`, notifica falha, `Resultado(estado="falhou", mensagem=msg)`.
-8. `duv == "duplicado"` → arquiva, nova, histórico `JÁ ANUNCIADO`, notifica,
+8. `duv == "duplicado"` → arquiva, histórico `JÁ ANUNCIADO`, nova, notifica,
    `Resultado(estado="duplicado", mensagem=..., duv="")`.
-9. senão → `fila_json.finalizar_sucesso(arquivo, duv)`, arquiva (com `duv`), `gerar_nova`, histórico
-   `OK`, `marcar_estado` na ficha nova, notifica ok, `Resultado(estado="ok", duv=duv)`.
+9. senão → `fila_json.finalizar_sucesso(arquivo, duv)`, histórico `OK` (**antes** de gerar a nova,
+   para ela já sair com a linha), arquiva (com `duv`), `gerar_nova`, `marcar_estado` na ficha nova,
+   notifica ok, `Resultado(estado="ok", duv=duv)`.
 
 `status.marcar_ok` é chamado por `main.executar_um`; ao acrescentar `"eta"` lá, o `status.json`
 passa a permitir a checagem por conteúdo (item 5).
