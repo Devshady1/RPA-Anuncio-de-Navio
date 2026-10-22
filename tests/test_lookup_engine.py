@@ -23,7 +23,18 @@ class TestConsultas(unittest.TestCase):
         self.assertEqual(lookup_engine.consultas("MARINAV"),
                          [("descricao", "MARINAV"), ("codigo", "MARINAV"),
                           ("descricao", "MARINA"),
-                          ("descricao", "MARIN"), ("descricao", "MARI")])
+                          ("descricao", "MARIN"), ("descricao", "MARI"),
+                          ("descricao", "MAR")])
+
+    def test_prefixo_minimo_tem_tres_letras(self):
+        # Medido no QAS: 'ILH' acha Ilheus e 'ILHE' nao, porque o acento
+        # quebra o prefixo a partir da 4a letra. Quem digita "Ilheus" sem
+        # acento so resolve se a consulta descer ate 3 letras.
+        self.assertIn(("descricao", "Ilh"), lookup_engine.consultas("Ilheus"))
+
+    def test_termo_curto_nao_gera_prefixo_menor_que_o_proprio(self):
+        self.assertEqual(lookup_engine.consultas("RIO"),
+                         [("descricao", "RIO"), ("codigo", "RIO")])
 
     def test_preserva_acento_no_termo(self):
         self.assertEqual(lookup_engine.consultas("Ilhéus")[0], ("descricao", "Ilhéus"))

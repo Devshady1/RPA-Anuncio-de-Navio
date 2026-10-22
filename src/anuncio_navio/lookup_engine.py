@@ -137,12 +137,16 @@ def normalizar(txt: str) -> str:
     return re.sub(r"\s+", " ", limpo).strip().upper()
 
 
-def consultas(termo: str, minimo: int = 4, limite: int = 6) -> list[tuple[str, str]]:
+def consultas(termo: str, minimo: int = 3, limite: int = 6) -> list[tuple[str, str]]:
     """Consultas a tentar no popup, em ordem: (campo_filtro, termo).
 
     campo_filtro e "descricao" ou "codigo". O texto do operador sempre vem
     primeiro pela descricao, para nao gastar uma ida ao servidor com um
     codigo que talvez nem exista.
+
+    minimo=3 por medicao no QAS: a busca e sensivel a acento, e 'ILH' acha
+    "Ilheus" enquanto 'ILHE' nao acha - por isso o prefixo nao pode parar
+    em 4 letras.
     """
     bruto = str(termo or "").strip()
     if not bruto:
