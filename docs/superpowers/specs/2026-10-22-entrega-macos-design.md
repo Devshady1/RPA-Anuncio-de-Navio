@@ -80,7 +80,7 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
    é **mesclada `C3:E3`**, com quebra de linha e altura para mensagens longas (ex.: candidatos
    ambíguos). O robô também acrescenta linha no `HISTÓRICO` e notifica. A aba `COMO PREENCHER` e a
    linha 29 passam a dizer "Salve (Cmd+S) e feche; a ficha nova aparece sozinha".
-7. **`HISTÓRICO` mestre** em `dados/historico.csv` (append-only); a cada ficha nova, a aba é
+7. **`HISTÓRICO` mestre** em `data/historico.csv` (append-only); a cada ficha nova, a aba é
    regerada com todas as linhas — o arquivo não acumula histórico dentro de si.
 8. **Ficha nova** = cópia do modelo `app/recursos/ficha_modelo.xlsx`, derivado da
    `ficha_anuncio_navio.xlsx` (abas `Anúncio` + `COMO PREENCHER`, `C3:E3` mesclada e a aba
@@ -90,17 +90,17 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
 9. **Planilha**: se `Microsoft Excel.app` existe, é o padrão; senão instalar LibreOffice do pacote e
    criar `Ficha de Anúncio.app` (AppleScript) na Área de Trabalho que faz `open -a LibreOffice`.
    Sempre com atalho de pasta "Anúncio de Navio" → `~/CODEBA/AnuncioNavio/ficha/`.
-10. **Sem SMTP nesta fase**: "pedido de cadastro" vira linha em `dados/pedidos.csv` + notificação.
+10. **Sem SMTP nesta fase**: "pedido de cadastro" vira linha em `data/pedidos.csv` + notificação.
 11. **Cópia local antes de ler**: o robô copia a ficha para `tmp/`, lê a cópia e substitui o
     original atomicamente (`os.replace`); só processa com mtime estável ≥5 s e sem lock de
     LibreOffice (`.~lock.*#`). Se o arquivo mudar durante o processamento, aborta e tenta no ciclo
-    seguinte. Duplicata (mesmo IMO+viagem em `status.json` já anunciado) é arquivada sem anunciar.
-12. **Instância única** (lock `fcntl` em `dados/`, herdado pelo serviço) e **log rotativo**
+    seguinte. Duplicata (mesmo IMO+ETA em `status.json` já anunciado, item 19) é arquivada sem anunciar.
+12. **Instância única** (lock `fcntl` em `logs/`, herdado pelo serviço) e **log rotativo**
     (30 dias) em `logs/`.
 13. **Orquestração**: o serviço observa só `ficha/`; a conversão é a mesma que já existe
     (`planilha.construir_payload` + validações de `inserir.py`) e o anúncio chama as funções do
     `run.py` **no próprio processo** (sem subprocesso, sem depender de PATH). O JSON continua
-    sendo gerado em `dados/json/` como contrato/evidência de integração, mas quem anuncia é a
+    sendo gerado em `data/json/` como contrato/evidência de integração, mas quem anuncia é a
     biblioteca — `run.py --fila` segue funcionando para integradores externos.
 14. **Senha em runtime**: `Config.from_env` lê `OPENPORT_SENHA` do ambiente e, se ausente, busca
     no Keychain (`security find-generic-password -s com.codeba.anuncionavio.openport -w`) — sem
@@ -118,6 +118,14 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
 18. **`CONFIGURAR`**: mesmo fluxo para primeira vez e troca de senha; grava num item temporário
     do Keychain, testa o login (read-only) e só então promove (`-U`) e reinicia o serviço —
     senha errada não derruba a configuração boa.
+19. **Duplicidade por conteúdo**: a viagem é reservada pelo robô, então uma ficha antiga re-salva
+    ganharia viagem nova e anunciaria de novo. Regra: mesmo **IMO + mesma ETA (data e hora)** já
+    presente em `status.json` = duplicado — arquiva sem anunciar e gera ficha nova.
+20. **Ficha parada não é reprocessada**: `data/estado_ficha.json` guarda `mtime` e tamanho da
+    última tentativa; ficha inalterada não roda de novo (nem repete notificação). Depois de
+    escrever o veredito, o robô registra o novo `mtime`.
+21. **`data/`** (não `dados/`): `status.py` e `sequencia.py` já resolvem `project_root/data/`;
+    o layout mantém esse nome para não duplicar estado.
 
 ## 6. Layout em produção
 
@@ -127,13 +135,14 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
   config/         .env (não-secreto) + CONFIGURAR.command               (preservado no update)
   ficha/          ficha_anuncio_navio.xlsx  ← SEMPRE uma, em branco ou pendente
     arquivo/      fichas processadas (evidência)
-  dados/          status.json, sequencia.json, historico.csv, pedidos.csv, json/ (contrato) (preservado)
-  logs/           servico.log, anuncio_AAAA-MM-DD.log
+  data/           status.json, sequencia.json, estado_ficha.json, historico.csv,
+                  pedidos.csv, json/ (contrato)                                  (preservado)
+  logs/           servico.log, anuncio_AAAA-MM-DD.log, servico.lock
   relatorios/     screenshots/  tmp/
 ```
 
-`ANUNCIO_HOME` (padrão: raiz do repo, para desenvolvimento/QAS) resolve os caminhos; no Mac vem do
-plist. `dados_rpa/`, `entrada/` e `data/` deixam de existir no deploy (o JSON continua aceito pelo
+`ANUNCIO_ROOT` (padrão: raiz do repo, para desenvolvimento/QAS) resolve os caminhos; no Mac vem do
+plist. `dados_rpa/` e `entrada/` deixam de existir no deploy (o JSON continua aceito pelo
 `run.py` para o contrato de integração).
 
 ## 7. O dia do agente
@@ -173,7 +182,7 @@ plist. `dados_rpa/`, `entrada/` e `data/` deixam de existir no deploy (o JSON co
 
 ## 10. Atualização (mesmo `ATUALIZAR.command`)
 
-Baixa/leva o novo `app/` → para o serviço → troca `app/` (nunca `config/`, `dados/`, `ficha/`) →
+Baixa/leva o novo `app/` → para o serviço → troca `app/` (nunca `config/`, `data/`, `ficha/`) →
 recarrega o LaunchAgent → notifica a versão. Se a nova versão falhar no smoke test, restaura o
 `app/` anterior (guarda `app.anterior/`).
 
