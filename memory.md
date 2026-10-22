@@ -362,3 +362,39 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
 - portos.csv = 25.456 do QAS (portal busca mundo, BR primeiro); Catalogo do Excel = 102 BR (ListaPortos A23:A124; dropdown gigante e inutilizavel).
 - Logo: logo_codeba.png (JPEG fundo xadrez falso) -> logo_codeba_transp.png (alpha real; texto branco = uso sobre fundo escuro).
 - Portal Streamlit (`.streamlit/config.toml`, tema dark navy) REMOVIDO em 02/10/2026 junto com `app.py`.
+
+## 13. Lookups resolvidos pelo popup do OpenPort (21/10/2026) — Fase 1
+- **O que mudou**: os 8 campos de classificacao (porto ant/prox, armador,
+  afretador, agencia, berco, operador, carga) passam a ser resolvidos pelo
+  **popup de consulta do OpenPort** — a fonte viva do cadastro. A ficha guarda o
+  **texto** do agente; o CSV em `tabelas/` virou **fallback** (usado so quando o
+  popup nao devolve nenhum candidato). Nome ambiguo barra **antes do Gravar**,
+  com os candidatos na mensagem.
+- **O que o reconhecimento mediu no QAS**:
+  - a consulta e por **PREFIXO**, insensivel a maiusculas e **sensivel a acento**
+    ("Ilhéus" acha; "ILHEUS" tambem; "ILHEUS" sem acento nao acha "ILHEUS" com
+    acento). Os filtros de descricao e de codigo sao **AND** no servidor.
+  - a grade fica em `table#TQuery`; a **selecao e o link `<a>` da 1a celula**
+    (`a[onclick*='QueryValor']`), nao radio e nao botao OK.
+  - clicar no link chama `QueryValor`, que grava no campo: hidden = id interno,
+    visivel = **codigo**, `span._3` = descricao. Com "sem paginacao" desmarcada a
+    lista vem inteira (o prefixo "A" no popup de portos passa de mil linhas).
+  - colunas medidas: carga = `["", cod, "Descricao Resumida", "Cod Grupo",
+    "Grupo Mercadoria", "Mercadoria", "", ""]` (mercadoria completa no indice 5);
+    berco = `["", cod, "Berco", "cod", "Posicao Atracacao"]`. Carga e filtrada
+    pela **Descricao Resumida** (indice 2), nao pela mercadoria completa.
+  - os dois filtros do popup precisam ser **limpos** antes de cada consulta
+    (esquecer um filtro velho zera o resultado).
+- **Os 3 defeitos da spec 5.6, corrigidos**: (1) o botao lupa nao e encontrado
+  por `xpath=ancestor::tr[1]` (a tela e `div.input-group.lookup`, nao `<tr>`);
+  (2) o popup **nao tem radio nem botao OK** — a selecao e o link da linha;
+  (3) o filtro de codigo do popup de portos **funciona** (medido com "BRIOS",
+  "30010" e "30010 - MARINAV"), contrary to what the spec assumed.
+- **Novos defects achados na implementacao**: a coluna de codigo (indice 1) da
+  grade precisa entrar na pontuacao (termo que **e** codigo), e o `*_codigo` do
+  fallback tem que viajar no JSON da fila (`construir_payload` +
+  `fila_json.normalizar`), senao ele morre no caminho planilha -> fila.
+- **Provas**: `tests/test_lookup_qas.py` (7 nomes + 3 codigos no QAS vivo) e
+  `tests/test_anuncio_qas.py` (fluxo completo a partir de nomes, **sem gravar**).
+- **Pendente**: os ids dos popups foram medidos no **QAS**; a leitura de tela no
+  **PROD** precisa ser repetida antes de promover (spec, risco 5).

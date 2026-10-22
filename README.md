@@ -42,6 +42,9 @@ ficha_anuncio_navio.xlsx  ->  entrada/  ->  inserir.py  ->  dados_rpa/{IMO}_{VIA
 - O agente preenche a ficha **só com nomes** e salva em `entrada/`.
 - `python inserir.py entrada` converte a ficha em JSON (resolvendo códigos e
   reservando a viagem), ou o `monitor_fila.py` faz isso sozinho a cada ciclo.
+  Na conversão, o texto do agente vai intacto e o código do CSV local (quando
+  existe) viaja ao lado, como fallback — a resolução final é do popup do
+  OpenPort, no momento do anúncio.
 - A ficha convertida vai para `entrada/processados/`; a rejeitada para
   `entrada/erro/` com `.log.txt` dizendo o motivo. Ficha ainda aberta no Excel
   fica em `entrada/` e é reprocessada no ciclo seguinte (nunca duplica).
@@ -62,17 +65,23 @@ O contrato é **um arquivo JSON por anúncio, na raiz de `dados_rpa/`**
 - Exemplo real preenchido: `dados_rpa/processados/9553256_000004__*__DUV000004.json`.
 
 Campos esperados (resumo): `nome_navio`, `imo`, `viagem`, `agencia`, `armador`,
-`operador`, `porto_ant`, `porto_prox`, `berco`, `afretador`, `carga` (código NCM
-de 8 dígitos — o nome da mercadoria é resolvido pelo RPA no momento da leitura),
+`operador`, `porto_ant`, `porto_prox`, `berco`, `afretador`, `carga` (nome da
+mercadoria **ou** código NCM de 8 dígitos — quem resolve é o popup do OpenPort;
+o CSV local é fallback),
 `qtd`, `tons`, `loa`, `tpb`, `eta/etb/etc/ets` (`DD/MM/AAAA HH:MM`, futuras),
 `calado{chegada_proa,chegada_popa,saida_proa,saida_popa}`, `documentos{dpem,manifesto,tripulantes}`,
 `tipo_viagem`, `tipo_operacao`, `sentido`, `natureza` (padrão `1/1/1/1` quando
 omitidos).
 
-**Ficha do agente marítimo**: `ficha_anuncio_navio.xlsx`. O agente preenche só
-nomes — agência, armador, operador, afretador, portos e **carga** têm o código
-resolvido pelo RPA (`tabelas.resolver` / `tabelas.resolver_carga`). Carga ambígua
-(e mais de um código possível) não é adivinhada: o RPA barra e lista os candidatos.
+## Ficha do agente marítimo
+
+`ficha_anuncio_navio.xlsx`. O agente preenche só nomes — agência, armador,
+operador, afretador, portos, berço e **carga** podem ser escritos por **nome ou
+código**. A resolução é feita pelo **popup de consulta do OpenPort** (fonte viva
+do cadastro): o texto do agente vai intacto, o popup devolve o código e a
+seleção preenche o campo. O CSV em `tabelas/` é só **fallback**, usado quando o
+popup não conhece o cadastro. Nome ambíguo **não é adivinhado**: o RPA barra
+antes do Gravar e lista os candidatos.
 
 ## Ponto de extensão (para o QA)
 
@@ -83,8 +92,12 @@ rode `run.py --fila`). Regras a respeitar:
 - **`viagem`/DUV precisa ser único por navio.** Reserve via
   `anuncio_navio.sequencia.proxima(root)` (atômico) antes de gravar o JSON —
   a anti-duplicidade (`status.json`, chave `imo_viagem`) barra repetição.
-- **Carga só por código de 8 dígitos** e calado nunca é adivinhado (erro manda
-  o navio ao porto errado). Os demais campos resolvem nome→código por `tabelas/`.
+- **Lookups por nome ou código**: agência, armador, operador, afretador, portos,
+  berço e carga são resolvidos pelo popup do OpenPort; o que o RPA não resolve
+  **barra antes do Gravar** (com os candidatos na mensagem). Calado nunca é
+  adivinhado (erro manda o navio ao porto errado).
+- **Carga**: nome da mercadoria ou código NCM de 8 dígitos; pelos dois caminhos
+  ela não é adivinhada — ambígua barra com os candidatos.
 - **ETs no futuro** (ETA ≤ ETB ≤ ETC ≤ ETS), senão o OpenPort recusa (erro 60133).
 - **Encoding do arquivo**: aceita UTF-8 com ou sem BOM (`utf-8-sig`) e `cp1252`,
   para não quebrar com a ferramenta que o produtor usar. Grave `utf-8` quando puder.
