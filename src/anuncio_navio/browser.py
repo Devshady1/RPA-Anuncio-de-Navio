@@ -275,6 +275,26 @@ _JS_CLICAR_LINHA = """(i) => {
 }"""
 
 
+def _ler_grade(popup: Page) -> list[list[str]]:
+    return popup.evaluate(_JS_GRADE) or []
+
+
+def _mesma_linha(a: list[str], b: list[str]) -> bool:
+    return [str(c).strip() for c in a] == [str(c).strip() for c in b]
+
+
+def _linha_confere(popup: Page, indice: int, linhas: list[list[str]]) -> bool:
+    """A linha `indice` da grade AGORA e a mesma que foi escolhida?
+
+    A resposta do servidor pode chegar depois da leitura: se a grade mudou,
+    o indice aponta para outro cadastro e o clique gravaria o registro errado.
+    """
+    atuais = _ler_grade(popup)
+    if indice >= len(atuais) or indice >= len(linhas):
+        return False
+    return _mesma_linha(atuais[indice], linhas[indice])
+
+
 def _popup_filtrar(popup: Page, campo, campo_filtro: str, termo: str) -> list[list[str]]:
     """Filtra o popup de consulta e devolve as linhas da grade (celulas).
 
@@ -307,7 +327,7 @@ def _popup_filtrar(popup: Page, campo, campo_filtro: str, termo: str) -> list[li
         popup.locator("#BPESQUISAR").first.evaluate("el => el.click()")
     esperar(popup, 3500)
     try:
-        return popup.evaluate(_JS_GRADE) or []
+        return _ler_grade(popup)
     except Exception as e:
         logger.warning(f"  {campo.rotulo}: grade ilegivel ({type(e).__name__}: {e}).")
         return []
@@ -372,6 +392,18 @@ def resolver_lookup_popup(page: Page, campo, termo: str) -> tuple[bool, list[dic
                     f"  {campo.rotulo}: '{texto}' devolveu {len(linhas)} linha(s), "
                     f"sem escolha unica ({len(cands)} candidato(s)).")
                 continue
+            if not _linha_confere(popup, idx, linhas):
+                # A grade mudou entre a leitura e o clique: escolhe de novo na
+                # grade atual, sem reenviar a pesquisa.
+                linhas = _ler_grade(popup)
+                idx, cands = lookup_engine.escolher(termo, linhas, campo)
+                if cands:
+                    candidatos = cands
+                if idx is None or not _linha_confere(popup, idx, linhas):
+                    logger.warning(
+                        f"  {campo.rotulo}: grade mudou durante a consulta "
+                        f"'{texto}' (indice {idx}); nao clica em linha duvidosa.")
+                    continue
             try:
                 clicou = popup.evaluate(_JS_CLICAR_LINHA, idx)
             except Exception:
