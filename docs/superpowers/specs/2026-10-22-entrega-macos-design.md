@@ -69,20 +69,24 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
    Keychain e reescreve o `config/.env`; também usado quando a senha muda.
 4. **Serviço** `LaunchAgent` `com.codeba.anuncionavio` em `~/Library/LaunchAgents/`, `RunAtLoad` +
    `KeepAlive`, executando `caffeinate -s <runtime>/bin/python3 monitor_fila.py --servico`
-   (`caffeinate -s` evita suspensão ociosa na tomada; não resolve tampa fechada — documentado).
+   (`caffeinate -s` evita suspensão ociosa na tomada). Tampa fechada: o instalador oferece
+   `sudo pmset -a disablesleep 1` (reversível) ou só a instrução "deixe aberto na tomada" — escolha
+   na instalação; sem `disablesleep`, o robô espera a tampa abrir e processa (nada se perde).
 5. **Notificação** via `osascript -e 'display notification …'` (o LaunchAgent roda na sessão do
    usuário, então aparece).
-6. **C3 mantém a fórmula** de validação ao vivo ("OK — PRONTO PARA ENVIAR" / "FALTAM N CAMPOS");
-   o robô escreve o veredito em **`C30`** (linha "RESULTADO DO ENVIO", abaixo da tabela — a `C4` é
-   cabeçalho), acrescenta linha no `HISTÓRICO` e notifica. A aba `COMO PREENCHER` e a linha 29
-   passam a dizer "Salve (Cmd+S) e feche; a ficha nova aparece sozinha".
+6. **`C3` é a única linha de status**: enquanto ele preenche, é a fórmula de validação ao vivo
+   ("OK — PRONTO PARA ENVIAR" / "FALTAM N CAMPOS"); na falha, o robô **escreve o veredito na
+   própria `C3`** (a fórmula volta com a ficha nova em branco, que é gerada após sucesso). A faixa
+   é **mesclada `C3:E3`**, com quebra de linha e altura para mensagens longas (ex.: candidatos
+   ambíguos). O robô também acrescenta linha no `HISTÓRICO` e notifica. A aba `COMO PREENCHER` e a
+   linha 29 passam a dizer "Salve (Cmd+S) e feche; a ficha nova aparece sozinha".
 7. **`HISTÓRICO` mestre** em `dados/historico.csv` (append-only); a cada ficha nova, a aba é
    regerada com todas as linhas — o arquivo não acumula histórico dentro de si.
 8. **Ficha nova** = cópia do modelo `app/recursos/ficha_modelo.xlsx`, derivado da
-   `ficha_anuncio_navio.xlsx` (abas `Anúncio` + `COMO PREENCHER`, C3, mais a linha 30
-   `RESULTADO DO ENVIO` e a aba `HISTÓRICO`). A `modelo_anuncio_navio.xlsx` (Catálogo/Ajuda) é
-   demo de importação no portal e **não** entra no fluxo do agente. Evidência = a ficha
-   preenchida, arquivada com timestamp e DUV.
+   `ficha_anuncio_navio.xlsx` (abas `Anúncio` + `COMO PREENCHER`, `C3:E3` mesclada e a aba
+   `HISTÓRICO`). A `modelo_anuncio_navio.xlsx` (Catálogo/Ajuda) é demo de importação no portal e
+   **não** entra no fluxo do agente. Evidência = a ficha preenchida, arquivada com timestamp e DUV.
+   Exemplo visual do estado de falha: `docs/superpowers/specs/exemplos/ficha_com_falha.xlsx`.
 9. **Planilha**: se `Microsoft Excel.app` existe, é o padrão; senão instalar LibreOffice do pacote e
    criar `Ficha de Anúncio.app` (AppleScript) na Área de Trabalho que faz `open -a LibreOffice`.
    Sempre com atalho de pasta "Anúncio de Navio" → `~/CODEBA/AnuncioNavio/ficha/`.
@@ -139,19 +143,19 @@ plist. `dados_rpa/`, `entrada/` e `data/` deixam de existir no deploy (o JSON co
 3. `Cmd+S` e **fecha** o app. (Se esquecer de fechar, a notificação lembra; nada se perde.)
 4. Em ≤10 s o robô lê, resolve os lookups, abre o OpenPort em headless, grava, verifica e confirma.
 5. Notificação: "Anúncio <IMO> viagem <X> gravado — DUV <Y>". A ficha preenchida vai para
-   `ficha/arquivo/` com o veredito na `C30`; no lugar já está a próxima em branco, e a aba
+   `ficha/arquivo/` com o veredito na `C3`; no lugar já está a próxima em branco, e a aba
    `HISTÓRICO` dela mostra a linha do anúncio concluído.
 
 ## 8. Fluxos de erro
 
 | Situação | Robô | O agente vê |
 |---|---|---|
-| Campo faltando | não grava; `C30` com a lista | `C30` = "FALTAM 2 CAMPOS (IMO, CARGA)" |
-| Nome não encontrado | não grava; `pedidos.csv` | `C30` = "PEDIDO: armador 'X' não cadastrado" |
-| Ambíguo | não grava; `pedidos.csv` com candidatos | `C30` = "PEDIDO: 2 armadores com 'AMELIA'" |
-| Senha mudou | não grava | `C30` = "a senha do OpenPort mudou — rode CONFIGURAR" |
-| OpenPort fora / timeout | não grava; retenta no ciclo | `C30` = "OpenPort indisponível, tentando de novo" |
-| Já anunciado (IMO+viagem) | arquiva sem anunciar | `C30` = "JÁ ANUNCIADO (DUV X)" |
+| Campo faltando | não grava; `C3` com a lista | `C3` = "FALTAM 2 CAMPOS (IMO, CARGA)" |
+| Nome não encontrado | não grava; `pedidos.csv` | `C3` = "PEDIDO: armador 'X' não cadastrado" |
+| Ambíguo | não grava; `pedidos.csv` com candidatos | `C3` = "PEDIDO: 2 armadores com 'AMELIA'" |
+| Senha mudou | não grava | `C3` = "a senha do OpenPort mudou — rode CONFIGURAR" |
+| OpenPort fora / timeout | não grava; retenta no ciclo | `C3` = "OpenPort indisponível, tentando de novo" |
+| Já anunciado (IMO+viagem) | arquiva sem anunciar | `C3` = "JÁ ANUNCIADO (DUV X)" |
 | Planilha aberta | espera (3 ciclos) e notifica | notificação "feche a planilha para processar" |
 | Serviço parado | — | `launchd` religa; se não, notificação "serviço parado" |
 
@@ -179,8 +183,10 @@ recarrega o LaunchAgent → notifica a versão. Se a nova versão falhar no smok
    (smoke test responde no dia da instalação.)
 2. **Gatekeeper**: `.command` baixado exige clique direito → Abrir (ou `xattr -d
    com.apple.quarantine`); testar no Mac real antes de entregar.
-3. **Tampa fechada/suspensão**: `caffeinate -s` só segura ocioso na tomada; se ele fechar a tampa,
-   o robô para até reabrir. Instruir "deixe aberto e na tomada".
+3. **Tampa fechada/suspensão**: `caffeinate -s` só segura ocioso na tomada; com a tampa fechada o
+   Mac dorme e o robô espera até reabrir. No dia da instalação decidimos entre `sudo pmset -a
+   disablesleep 1` (segura com a tampa fechada, reversível com `disablesleep 0`; bateria/calor se
+   ficar fora da tomada) ou só a instrução "deixe aberto e na tomada".
 4. **Excel mantém o arquivo aberto**: `os.replace` funciona, mas um save tardio do Excel pode
    reintroduzir a ficha antiga; a anti-duplicidade a arquiva sem anunciar de novo.
 5. **LibreOffice**: download/instalação no dia (tamanho ~350 MB) e associação de `.xlsx`.
