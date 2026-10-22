@@ -30,6 +30,21 @@ class TestFilaJson(unittest.TestCase):
         self.assertEqual(dados["calado_cheg_proa"], "8,30")
         self.assertEqual(dados["navio_nome_ref"], "VOYAGER")
 
+    def test_normalizar_preserva_o_codigo_de_fallback_do_lookup(self):
+        # O texto do agente vai intacto; o codigo do CSV local viaja ao lado
+        # como fallback, para quando o popup do OpenPort nao conhecer o
+        # cadastro. Sem isso o fallback morre no caminho da fila.
+        bruto = dict(_payload_minimo())
+        bruto["armador"] = "MARINAV"
+        bruto["armador_codigo"] = "30010"
+        dados = fila_json.normalizar(bruto)
+        self.assertEqual(dados["armador"], "MARINAV")
+        self.assertEqual(dados["armador_codigo"], "30010")
+
+    def test_normalizar_inventa_codigo_vazio_quando_nao_veio(self):
+        dados = fila_json.normalizar(_payload_minimo())
+        self.assertEqual(dados.get("armador_codigo", ""), "")
+
     def test_carregar_anuncio_exige_obrigatorios(self):
         caminho = ROOT / "dados_rpa" / "tmp_teste_sem_imo.json"
         caminho.write_text("{}", encoding="utf-8")

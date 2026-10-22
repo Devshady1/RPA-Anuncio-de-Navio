@@ -72,15 +72,22 @@ class TestInserir(unittest.TestCase):
         _preencher(arq, limpar=limpar)
         return ingerir_um(arq, destino=self.destino, root=self.seq)
 
-    def test_ficha_valida_vira_json_com_codigos_resolvidos(self):
+    def test_ficha_valida_vira_json_com_o_texto_e_o_codigo_de_fallback(self):
         r = self._ingerir("valida.xlsx")
         self.assertTrue(r["ok"], r["erro"])
         payload = json.loads(r["json"].read_text(encoding="utf-8"))
-        self.assertEqual(payload["carga"], "26040000")
-        self.assertEqual(payload["agencia"], "30010")
-        self.assertEqual(payload["operador"], "30002")
-        self.assertEqual(payload["armador"], "00000000000005")
-        self.assertEqual(payload["porto_ant"], "BRMCZ")
+        # O texto do agente vai intacto: quem resolve e o popup do OpenPort.
+        self.assertEqual(payload["carga"], "niquel")
+        self.assertEqual(payload["agencia"], "MARINAV")
+        self.assertEqual(payload["operador"], "INTERMARIT")
+        self.assertEqual(payload["armador"], "TAMAR SHIP MANAGEMENT")
+        self.assertEqual(payload["porto_ant"], "Maceio")
+        # O codigo do CSV local viaja ao lado, como fallback.
+        self.assertEqual(payload["carga_codigo"], "26040000")
+        self.assertEqual(payload["agencia_codigo"], "30010")
+        self.assertEqual(payload["operador_codigo"], "30002")
+        self.assertEqual(payload["armador_codigo"], "00000000000005")
+        self.assertEqual(payload["porto_ant_codigo"], "BRMCZ")
         self.assertEqual(payload["tipo_viagem"], "1")   # classificacao padrao
         self.assertTrue(payload["viagem"])
         arquivada = list((self.entrada / "processados").glob("*.xlsx"))

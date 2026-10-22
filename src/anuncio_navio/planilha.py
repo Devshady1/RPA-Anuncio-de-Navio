@@ -144,9 +144,11 @@ CALADO_MAX_M = 16.0
 
 # Campos da planilha que aceitam NOME ou CODIGO, e a tabela correspondente.
 # Carga entra aqui desde 14/10/2026: o agente maritimo informa o NOME da
-# mercadoria e a resolucao nome -> codigo NCM passou a ser dever do RPA
-# (tabelas.resolver_carga). A regra que segue intacta: a carga NUNCA e
-# adivinhada - nome ambiguo barra com os candidatos para escolha humana.
+# mercadoria e a resolucao nome -> codigo NCM passou a ser dever do RPA.
+# Desde 21/10/2026 a decisao final e do POPUP do OpenPort (fonte viva do
+# cadastro): o texto do agente vai intacto e o CSV local vira so o fallback.
+# A regra que segue intacta: a carga NUNCA e adivinhada - nome ambiguo barra
+# com os candidatos para escolha humana.
 CAMPOS_CLASSIF = ("tipo_viagem", "tipo_operacao", "sentido", "natureza")
 
 ROTULOS_CARGA = {
@@ -253,32 +255,24 @@ def _ler_aba(wb, aba: str, p: Path) -> dict:
             campos[k2] = _texto(v2)
             continue
 
-        # Carga: o agente escreve o NOME da mercadoria e o RPA resolve o codigo
-        # NCM. Nome ambiguo NAO e adivinhado: barra com os candidatos.
+        # Carga: o agente escreve o NOME da mercadoria. O texto vai intacto
+        # para o popup do OpenPort (fonte viva do cadastro); o codigo do CSV
+        # local, quando ele resolve, vira o fallback. A ambiguidade e decidida
+        # no popup, que devolve os candidatos - nunca aqui.
         if norm in ROTULOS_CARGA and (val := _texto(v1)):
-            codigo, candidatos = tabelas.resolver_carga(val)
-            if codigo:
-                campos["carga"] = codigo
-                continue
-            opcoes = "\n  ".join(f"{c} - {d}" for c, d in candidatos[:6])
-            raise ValueError(
-                f"Mercadoria '{val}' nao pode ser resolvida sozinha.\n"
-                + (f"  Possiveis:\n  {opcoes}\n"
-                   if candidatos else
-                   "  Nao encontrada na tabela de mercadorias (cargas.csv)."))
-        # Resolve NOME -> CODIGO como no formulario de entrada. Sem isso o
-        # agente teria que procurar o codigo na aba Catalogo, que e exatamente
-        # o trabalho manual que a interface nova tenta eliminar.
+            codigo, _candidatos = tabelas.resolver_carga(val)
+            campos["carga"] = val
+            campos["carga_codigo"] = codigo or ""
+            continue
+        # NOME ou CODIGO: o texto do agente vai intacto (o motor extrai o
+        # codigo quando o texto traz "30010 - MARINAV"); o CSV local, quando
+        # resolve, vira o codigo de fallback.
         if norm in CAMPOS_RESOLVEIS and (val := _texto(v1)):
-            codigo, alternativas = tabelas.resolver(_CHAVE_POR_ROTULO[norm], val)
-            if codigo:
-                campos[ROTULOS[norm]] = codigo
-                continue
-            opcoes = " · ".join(f"{c} ({d[:28]})" for c, d in alternativas)
-            raise ValueError(
-                f"'{val}' nao consta na tabela de {norm}. "
-                + (f"Opcoes: {opcoes}" if opcoes else "Confira a digitacao.")
-            )
+            chave = _CHAVE_POR_ROTULO[norm]
+            codigo, _alternativas = tabelas.resolver(chave, val)
+            campos[ROTULOS[norm]] = val
+            campos[chave + "_codigo"] = codigo or ""
+            continue
         chave = ROTULOS.get(norm)
         if chave:
             campos[chave] = _texto(v1)
@@ -296,9 +290,9 @@ def _ler_aba(wb, aba: str, p: Path) -> dict:
     # manual quando a operacao for diferente.
     config.aplicar_classificacao_padrao(campos)
     for k in ("agencia", "armador", "operador", "porto_ant", "porto_prox",
-                "berco", "afretador", "carga"):
-        if campos.get(k):
-            campos[k] = _extrair_codigo(campos[k])
+              "berco", "afretador", "carga"):
+        if campos.get(k + "_codigo"):
+            campos[k + "_codigo"] = _extrair_codigo(campos[k + "_codigo"])
     return campos
 
 
@@ -342,10 +336,14 @@ def validar_campos(c: dict) -> list[str]:
 
 
 def construir_payload(c: dict) -> dict:
-    """Monta o payload no mesmo shape do app.montar_payload()."""
+    """Monta o payload no mesmo shape do app.montar_payload().
+
+    Os lookups viajam com o TEXTO do agente (quem resolve e o popup do
+    OpenPort) e com o codigo do CSV local ao lado, como fallback.
+    """
     g = lambda k: (c.get(k) or "").strip()  # noqa: E731
     cal = lambda k: g(k).replace(",", ".")  # noqa: E731
-    return {
+    payload = {
         "nome_navio": g("nome_navio"),
         "imo": g("imo"),
         "agencia": g("agencia"),
@@ -377,3 +375,7 @@ def construir_payload(c: dict) -> dict:
         "sentido": g("sentido"),
         "natureza": g("natureza"),
     }
+    for k in ("agencia", "armador", "operador", "porto_ant", "porto_prox",
+              "berco", "afretador", "carga"):
+        payload[k + "_codigo"] = g(k + "_codigo")
+    return payload

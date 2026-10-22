@@ -139,6 +139,13 @@ def normalizar(bruto: dict) -> dict:
     # preserva extras informativos (ex. nome_navio, loa/tpb, documentos) sem quebrar nada
     if bruto.get("nome_navio"):
         limpo["navio_nome_ref"] = str(bruto["nome_navio"]).strip()
+    # codigo de fallback dos lookups: o texto do agente vai intacto e o popup do
+    # OpenPort resolve; o codigo do CSV local viaja ao lado, para quando o
+    # popup nao conhecer o cadastro.
+    for k in ("agencia", "armador", "operador", "porto_ant", "porto_prox",
+              "berco", "afretador", "carga"):
+        if d.get(k + "_codigo"):
+            limpo[k + "_codigo"] = str(d[k + "_codigo"]).strip()
     for extra in ("loa", "tpb"):
         if d.get(extra) not in (None, "") and extra not in limpo:
             limpo[extra] = str(d[extra]).strip().replace(".", ",")

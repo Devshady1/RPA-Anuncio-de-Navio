@@ -3,10 +3,59 @@ import logging
 import os
 import re
 
-from . import browser
-from .exceptions import AnuncioError
+from . import browser, lookup_engine
+from .exceptions import AnuncioError, LookupError
 
 logger = logging.getLogger("anuncio.anuncio")
+
+
+def _codigo_do_termo(termo: str) -> str:
+    """Codigo que o proprio operador escreveu: '30010 - MARINAV' -> '30010'.
+
+    Serve de fallback quando o popup do OpenPort nao resolve: digitar o
+    codigo que o agente ja deu e melhor do que abortar a rodada.
+    """
+    t = str(termo or "").strip()
+    achado = re.match(r"^([A-Za-z0-9]+)\s*[-–—:]", t)
+    if achado and achado.group(1) != t:
+        return achado.group(1)
+    return t if t.isdigit() else ""
+
+
+def _campos_lookup(d: dict) -> list[tuple[lookup_engine.CampoLookup, str, str]]:
+    """Campos de classificacao preenchidos: (campo, termo do agente, codigo fallback).
+
+    A ordem e a de lookup_engine.CAMPOS (a mesma do Bloco 3 antigo).
+    """
+    saida = []
+    for campo in lookup_engine.CAMPOS:
+        termo = (d.get(campo.chave) or "").strip()
+        if not termo:
+            continue
+        fallback = (d.get(campo.chave + "_codigo") or "").strip() or _codigo_do_termo(termo)
+        saida.append((campo, termo, fallback))
+    return saida
+
+
+def _usar_fallback(candidatos: list[dict], codigo_fallback: str) -> bool:
+    """Se o codigo do CSV local pode ser usado depois de o popup falhar.
+
+    So quando o popup NAO achou nenhum cadastro. Com candidatos, o popup
+    achou e nao conseguiu escolher: escolher pelo CSV local seria adivinhar
+    (e a copia local do cadastro e velha).
+    """
+    return not candidatos and bool(codigo_fallback)
+
+
+def _pendencia(campo, termo: str, candidatos: list[dict]) -> str:
+    """Texto da pendencia: o que o agente escreveu e o que o popup achou."""
+    msg = f"{campo.rotulo} '{termo}' nao encontrado no cadastro"
+    if candidatos:
+        lista = "; ".join(
+            f"{c.get('codigo', '')} {c.get('descricao', '')}".strip()[:60]
+            for c in candidatos[:5])
+        msg += f". Candidatos: {lista}"
+    return msg
 
 
 def _ler_duv(page, config) -> str:
@@ -57,24 +106,25 @@ def criar_anuncio(page, config, d: dict) -> str:
         if d.get(f"{k}_hora"):
             browser.preencher(page, c[f"{k}_hora"], d[f"{k}_hora"])
 
-    # Bloco 3 — lookups visivel _2 + TAB (ajaxLookup valida hidden)
+    # Bloco 3 — lookups. O popup de consulta do OpenPort e a fonte viva do
+    # cadastro: o agente escreve o NOME (ou "30010 - MARINAV") e o popup
+    # devolve o codigo. O CSV local so entra como fallback quando o popup
+    # nao conhece o cadastro.
     pend = []
-    for cod, hidden, lupa, rot in [
-        ("porto_ant", "porto_ant_hidden", None, "PortoAnt"),
-        ("porto_prox", "porto_prox_hidden", None, "PortoProx"),
-        ("armador", "armador_hidden", None, "Armador"),
-        ("afretador", "afretador_hidden", None, "Afretador"),
-        ("agencia", "agencia_hidden", "agencia_lupa", "Agencia"),
-        ("berco", "berco_hidden", None, "Berco"),
-        ("operador", "operador_hidden", None, "Operador"),
-        ("carga", "carga_hidden", None, "Carga"),
-    ]:
-        if not d.get(cod):
-            continue
-        lupa_css = c.get(lupa) if lupa else ""
-        ok = browser.preencher_lookup(page, c[cod], c[hidden], lupa_css, d[cod], rot)
+    for campo, termo, codigo_fallback in _campos_lookup(d):
+        ok, cands = browser.resolver_lookup_popup(page, campo, termo)
+        if not ok and _usar_fallback(cands, codigo_fallback):
+            logger.info(f"  {campo.rotulo}: popup nao achou '{termo}', usando o codigo local {codigo_fallback}.")
+            ok = browser.preencher_lookup(page, campo.seletor_visivel, campo.seletor_hidden,
+                                          campo.seletor_lupa, codigo_fallback, campo.rotulo)
         if not ok:
-            pend.append(f"{rot}={d[cod]}")
+            pend.append(_pendencia(campo, termo, cands))
+    if pend:
+        browser.screenshot(page, config.project_root, "lookup_pendente")
+        logger.warning(f"Lookups nao resolvidos: {', '.join(pend)}")
+        # barra ANTES do Gravar: o OpenPort so recusaria com "Armador Afretador
+        # nao pode ficar vazio", que e mensagem de programador para o agente.
+        raise LookupError("Lookups nao resolvidos: " + ", ".join(pend))
 
     # Bloco 4 — calado / mercadoria direto
     for k, cssk in (("calado_cheg_proa", "calado_cheg_proa"), ("calado_cheg_popa", "calado_cheg_popa"),
@@ -82,10 +132,6 @@ def criar_anuncio(page, config, d: dict) -> str:
                     ("qtd", "qtd_carga"), ("tons", "tons_prev")):
         if d.get(k):
             browser.preencher(page, c[cssk], d[k])
-
-    if pend:
-        browser.screenshot(page, config.project_root, "lookup_pendente")
-        logger.warning(f"Lookups pendentes (confira codigo): {', '.join(pend)}")
 
     # DUV = numero da viagem. Campo obrigatorio antes do Gravar, mas o numero
     # oficial e gerado pelo sistema (nao vai em papel nenhum), entao este valor
