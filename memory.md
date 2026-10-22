@@ -398,3 +398,27 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   `tests/test_anuncio_qas.py` (fluxo completo a partir de nomes, **sem gravar**).
 - **Pendente**: os ids dos popups foram medidos no **QAS**; a leitura de tela no
   **PROD** precisa ser repetida antes de promover (spec, risco 5).
+
+### 2026-10-22 — correcoes da revisao (antes do merge da fase 1)
+
+- **Regravar antes de Confirmar foi REMOVIDO**: o Verificar deixa o anuncio em
+  status Elaborado e o OpenPort recusa o Gravar com `200301` ("nao e permitido
+  alterar..."). O Confirmar funciona direto. Provado no QAS (DUV 000008 e
+  000009): antes saia o alerta, depois nao sai mais.
+- **Busca por prefixo desce ate 3 letras** (`minimo=3`): a busca e sensivel a
+  acento; `ILH` acha "Ilheus" e `ILHE` nao. Com 4 letras era impossivel
+  resolver nome sem acento. Provado no QAS: "Ilheus" -> BRIOS.
+- **Degradacao por PALAVRA antes de caractere**: a descricao curta do cadastro
+  e o comeco do nome completo ("MIUDEZAS COMESTIVEIS" x "MIUDEZAS COMESTIVEIS
+  DE BOVINO,..."). Provado no QAS: mercadoria completa -> 02061000;
+  "AMELIA NAVIGATION COMPANY LTD" -> 60700 (o cadastro e "AMELIA NAVIGATION").
+- **Linha sem nota nao e candidato** (score < 0.7): antes uma linha irrelevante
+  da grade bloqueava o fallback do CSV e a ficha barrava sem motivo.
+- **A linha e reconferida imediatamente antes do clique**: se a grade mudou na
+  resposta (servidor lento), o indice apontaria para outro cadastro.
+- **Falha tecnica do popup** (nao abre, filtro sumiu, grade ilegivel) levanta
+  `browser.FalhaPopup` e a rodada falha (retryavel) — antes virava "nao
+  encontrado" e o anuncio caia calado no CSV velho.
+- **"sem paginacao"**: com a caixa MARCADA a grade vem inteira (o teste vivo
+  `test_filtro_traz_a_lista_inteira_sem_paginacao` confirma >100 linhas).
+
