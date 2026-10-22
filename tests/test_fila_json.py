@@ -41,9 +41,9 @@ class TestFilaJson(unittest.TestCase):
         self.assertEqual(dados["armador"], "MARINAV")
         self.assertEqual(dados["armador_codigo"], "30010")
 
-    def test_normalizar_inventa_codigo_vazio_quando_nao_veio(self):
+    def test_normalizar_nao_inventa_codigo_quando_nao_veio(self):
         dados = fila_json.normalizar(_payload_minimo())
-        self.assertEqual(dados.get("armador_codigo", ""), "")
+        self.assertNotIn("armador_codigo", dados)
 
     def test_carregar_anuncio_exige_obrigatorios(self):
         caminho = ROOT / "dados_rpa" / "tmp_teste_sem_imo.json"

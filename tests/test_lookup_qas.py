@@ -22,6 +22,7 @@ class TestLookupNoQas(unittest.TestCase):
         ("operador", "INTERMARIT", "30002"),
         ("berco", "BERÇO 101", "101"),
         ("porto_ant", "Ilhéus", "BRIOS"),
+        ("porto_prox", "Santos", "BRSSZ"),
         ("carga", "MIUDEZAS COMESTIVEIS", "02061000"),
     ]
 

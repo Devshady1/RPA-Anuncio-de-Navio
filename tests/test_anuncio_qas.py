@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from anuncio_navio import anuncio, browser, fila_json, lookup_engine, main, verificar
 from anuncio_navio.config import Config, URL_QAS
-from anuncio_navio.exceptions import AnuncioError, VerificacaoError
+from anuncio_navio.exceptions import AnuncioError, LookupError as ErroLookup, VerificacaoError
 
 # Termos VALIDADOS no QAS vivo (tests/test_lookup_qas.py): cada um com o
 # codigo que o popup devolve.
@@ -109,7 +109,7 @@ class TestAnuncioCompletoNoQas(unittest.TestCase):
             main.executar_um(self.cfg, dados)
 
         # Nao pode ser LookupError: o anuncio chegou ate o fim do formulario.
-        self.assertNotIsInstance(ctx.exception, LookupError)
+        self.assertNotIsInstance(ctx.exception, ErroLookup)
         self.assertIsInstance(ctx.exception, AnuncioError)
 
         # Os 8 lookups ficaram preenchidos, com o codigo que o popup devolve.

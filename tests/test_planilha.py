@@ -95,7 +95,8 @@ class TestLookupsPreservamTexto(unittest.TestCase):
         # no OpenPort: a decisao final e do popup, nao da copia local.
         campos = _ficha_com("armador (nome ou código)", "ZZZ EMPRESA QUE NAO EXISTE")
         self.assertEqual(campos["armador"], "ZZZ EMPRESA QUE NAO EXISTE")
-        self.assertEqual(campos.get("armador_codigo", ""), "")
+        self.assertIn("armador_codigo", campos)
+        self.assertEqual(campos["armador_codigo"], "")
 
     def test_nome_conhecido_guarda_o_codigo_como_fallback(self):
         campos = _ficha_com("armador (nome ou código)", "MARINAV")
@@ -110,7 +111,8 @@ class TestLookupsPreservamTexto(unittest.TestCase):
     def test_carga_que_nao_existe_nao_derruba_a_ficha(self):
         campos = _ficha_com("carga predominante (mercadoria)", "ZZZ CARGA QUE NAO EXISTE")
         self.assertEqual(campos["carga"], "ZZZ CARGA QUE NAO EXISTE")
-        self.assertEqual(campos.get("carga_codigo", ""), "")
+        self.assertIn("carga_codigo", campos)
+        self.assertEqual(campos["carga_codigo"], "")
 
     def test_berco_preserva_o_texto(self):
         campos = _ficha_com("berço preferência", "BERÇO 101")

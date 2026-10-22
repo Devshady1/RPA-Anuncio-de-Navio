@@ -86,10 +86,12 @@ class TestPontuar(unittest.TestCase):
         self.assertEqual(lookup_engine.pontuar("ilheus", "Ilhéus"), 1.0)
 
     def test_descricao_comeca_com_o_termo(self):
-        self.assertGreater(lookup_engine.pontuar("MARINAV", "MARINAV LTDA"), 0.7)
+        self.assertEqual(lookup_engine.pontuar("MARINAV", "MARINAV LTDA"), 0.8)
 
     def test_termo_comeca_com_a_descricao(self):
-        self.assertGreater(lookup_engine.pontuar("MARINAV LTDA", "MARINAV"), 0.5)
+        # 0.7 e exatamente o limiar de escolha: um teste frouxo (>0.5)
+        # continuaria verde se o valor caísse para 0.6 e a escolha quebrasse.
+        self.assertEqual(lookup_engine.pontuar("MARINAV LTDA", "MARINAV"), 0.7)
 
     def test_sem_relacao_nao_pontua(self):
         self.assertEqual(lookup_engine.pontuar("MARINAV", "INTERMARIT"), 0.0)
@@ -134,9 +136,12 @@ class TestEscolher(unittest.TestCase):
         linhas = [["", "02061000", "MIUDEZAS COMESTIVEIS", "2",
                    "CARNES E MIUDEZAS, COMESTIVEIS.",
                    "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS"]]
-        idx, _ = lookup_engine.escolher(
+        idx, cands = lookup_engine.escolher(
             "MIUDEZAS COMESTIVEIS DE BOVINO,FRESCAS OU REFRIGERADAS", linhas, self.carga)
         self.assertEqual(idx, 0)
+        # A nota tem de vir da mercadoria completa (1.0). Com o indice errado
+        # (6), so a Descricao Resumida pontuaria (0.7) e o teste passaria.
+        self.assertEqual(cands[0]["score"], 1.0)
 
     def test_carga_usa_o_indice_da_mercadoria_completa(self):
         # Grade medida no QAS: ["", cod, "Descricao Resumida", "Cod Grupo",
