@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 _SEPARADORES = re.compile(r"^([A-Za-z0-9]+)\s*[-–—:]")
 _NUMERICO = re.compile(r"^\d+$")
+_LIMIAR = 0.7
 
 
 @dataclass(frozen=True)
@@ -276,9 +277,12 @@ def escolher(termo: str, linhas: list[list[str]],
         }))
 
     ordenados = sorted(pares, key=lambda p: -p[1]["score"])
-    candidatos = [d for _, d in ordenados]
+    # Candidato e a linha que o popup ACHOU (score no limiar). Linha sem nota
+    # e ruido do filtro, nao resultado: se entrasse aqui, bloquearia o
+    # fallback e a ficha barraria mesmo com o popup sem resultado.
+    candidatos = [d for _, d in ordenados if d["score"] >= _LIMIAR]
     melhor_score = ordenados[0][1]["score"]
     empatados = [p for p in ordenados if p[1]["score"] == melhor_score]
-    if melhor_score < 0.7 or len(empatados) > 1:
+    if melhor_score < _LIMIAR or len(empatados) > 1:
         return None, candidatos
     return empatados[0][0], candidatos

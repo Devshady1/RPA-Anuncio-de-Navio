@@ -56,6 +56,14 @@ class TestUsarFallback(unittest.TestCase):
     def test_sem_codigo_local_nao_ha_fallback(self):
         self.assertFalse(anuncio._usar_fallback([], ""))
 
+    def test_popup_com_linha_sem_nota_usa_o_codigo_do_csv(self):
+        # Linha que nao casa nada e ruido do filtro, nao "achado": o CSV
+        # local continua valendo (antes essa linha barrava a ficha).
+        armador = next(c for c in lookup_engine.CAMPOS if c.chave == "armador")
+        _, cands = lookup_engine.escolher(
+            "MARINAV", [["", "99999", "OUTRA COISA"]], armador)
+        self.assertTrue(anuncio._usar_fallback(cands, "30010"))
+
 
 class TestCamposDoMotor(unittest.TestCase):
     def test_o_motor_cobre_os_campos_do_bloco_3(self):

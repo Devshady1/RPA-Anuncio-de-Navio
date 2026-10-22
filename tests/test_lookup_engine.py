@@ -121,6 +121,15 @@ class TestEscolher(unittest.TestCase):
         self.assertIsNone(idx)
         self.assertEqual(cands, [])
 
+    def test_linha_sem_nota_nao_conta_como_candidato(self):
+        # O popup pode devolver uma linha que nao casa nada (score 0.0). Ela
+        # nao pode bloquear o fallback do CSV: sem candidato de verdade, o
+        # popup NAO achou o cadastro.
+        linhas = [["", "99999", "OUTRA COISA"]]
+        idx, cands = lookup_engine.escolher("MARINAV", linhas, self.armador)
+        self.assertIsNone(idx)
+        self.assertEqual(cands, [])
+
     def test_carga_compara_com_a_mercadoria_completa(self):
         linhas = [["", "02061000", "MIUDEZAS COMESTIVEIS", "2",
                    "CARNES E MIUDEZAS, COMESTIVEIS.",
