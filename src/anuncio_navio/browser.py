@@ -1,9 +1,12 @@
 import contextlib
 import logging
 import re
+import time
 from datetime import datetime
 
 from playwright.sync_api import Page, BrowserContext
+
+from . import lookup_engine
 
 logger = logging.getLogger("anuncio.browser")
 
@@ -254,6 +257,143 @@ def _resolver_via_lupa(page: Page, css_visivel: str, css_lupa: str, codigo: str,
         with contextlib.suppress(Exception):
             popup.close()
         return False
+
+
+_JS_GRADE = """() => {
+  const rows = [...document.querySelectorAll('table#TQuery tr')].filter(tr => tr.querySelector('td'));
+  return rows.map(tr => [...tr.querySelectorAll('td')].map(td => td.innerText.trim()));
+}"""
+
+_JS_CLICAR_LINHA = """(i) => {
+  const rows = [...document.querySelectorAll('table#TQuery tr')].filter(tr => tr.querySelector('td'));
+  const tr = rows[i];
+  if (!tr) return false;
+  const link = tr.querySelector("a[onclick*='QueryValor']");
+  if (!link) return false;
+  link.click();
+  return true;
+}"""
+
+
+def _popup_filtrar(popup: Page, campo, campo_filtro: str, termo: str) -> list[list[str]]:
+    """Filtra o popup de consulta e devolve as linhas da grade (celulas).
+
+    O popup filtra por PREFIXO e os dois filtros (descricao e codigo) sao AND
+    no servidor: um filtro velho esquecido impede o resultado novo. Por isso
+    os dois sao limpos antes de cada consulta.
+    """
+    try:
+        sem = popup.locator("input[type=checkbox]").first
+        if sem.count() and not sem.is_checked():
+            sem.evaluate("el => el.click()")
+            esperar(popup, 700)
+    except Exception:
+        pass
+
+    desc_id = campo.filtro_descricao
+    cod_id = campo.filtro_codigo
+    alvo_id = desc_id if campo_filtro == "descricao" else cod_id
+    outro_id = cod_id if campo_filtro == "descricao" else desc_id
+
+    with contextlib.suppress(Exception):
+        popup.locator("#" + outro_id).first.fill("")
+    try:
+        popup.locator("#" + alvo_id).first.fill(termo)
+    except Exception as e:
+        logger.warning(f"  {campo.rotulo}: filtro {alvo_id} nao encontrado ({type(e).__name__}).")
+        return []
+
+    with contextlib.suppress(Exception):
+        popup.locator("#BPESQUISAR").first.evaluate("el => el.click()")
+    esperar(popup, 3500)
+    try:
+        return popup.evaluate(_JS_GRADE) or []
+    except Exception as e:
+        logger.warning(f"  {campo.rotulo}: grade ilegivel ({type(e).__name__}: {e}).")
+        return []
+
+
+def _popup_esperar_fechar(popup: Page, limite_ms: int = 8000) -> bool:
+    """Espera o popup fechar (o link de selecao chama window.close()).
+
+    Nao usa esperar(): wait_for_timeout em pagina ja fechada levanta
+    TargetClosedError.
+    """
+    passos = max(1, limite_ms // 250)
+    for _ in range(passos):
+        try:
+            if popup.is_closed():
+                return True
+        except Exception:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def resolver_lookup_popup(page: Page, campo, termo: str) -> tuple[bool, list[dict]]:
+    """Resolve o campo pelo popup de consulta do OpenPort (fonte viva).
+
+    Devolve (resolvido, candidatos). Resolvido e True quando o hidden do
+    campo ficou preenchido; nesse caso a lista de candidatos vem vazia.
+    """
+    try:
+        botao = page.locator(campo.seletor_lupa).first
+        sem_botao = botao.count() == 0
+    except Exception:
+        sem_botao = True
+    if sem_botao:
+        logger.info(f"  {campo.rotulo}: botao lupa nao localizado.")
+        return False, []
+
+    try:
+        with page.expect_popup(timeout=12000) as pop_info:
+            botao.evaluate("el => el.click()")
+        popup = pop_info.value
+    except Exception:
+        logger.warning(f"  {campo.rotulo}: popup de consulta nao abriu.")
+        return False, []
+
+    try:
+        popup.set_default_timeout(15000)
+        with contextlib.suppress(Exception):
+            popup.wait_for_load_state("domcontentloaded")
+        esperar(popup, 1500)
+
+        candidatos: list[dict] = []
+        for campo_filtro, texto in lookup_engine.consultas(termo):
+            linhas = _popup_filtrar(popup, campo, campo_filtro, texto)
+            if not linhas:
+                continue
+            idx, cands = lookup_engine.escolher(termo, linhas, campo)
+            if cands:
+                candidatos = cands
+            if idx is None:
+                logger.info(
+                    f"  {campo.rotulo}: '{texto}' devolveu {len(linhas)} linha(s), "
+                    f"sem escolha unica ({len(cands)} candidato(s)).")
+                continue
+            try:
+                clicou = popup.evaluate(_JS_CLICAR_LINHA, idx)
+            except Exception:
+                clicou = False
+            if not clicou:
+                logger.warning(f"  {campo.rotulo}: linha {idx} sem link de selecao.")
+                continue
+            _popup_esperar_fechar(popup)
+            esperar(page, 2000)
+            hv = _hidden_valor(page, campo.seletor_hidden)
+            if hv:
+                logger.info(f"  {campo.rotulo} '{termo}' -> hidden {hv[:20]} (popup).")
+                return True, []
+            logger.warning(f"  {campo.rotulo} '{termo}': selecao no popup nao preencheu o hidden.")
+            return False, candidatos
+
+        logger.warning(f"  {campo.rotulo} '{termo}': nenhum resultado no popup.")
+        return False, candidatos
+    finally:
+        with contextlib.suppress(Exception):
+            if not popup.is_closed():
+                popup.close()
 
 
 def aceitar_dialogos(page: Page, rotulo=""):
