@@ -25,6 +25,14 @@ class TestLookupNoQas(unittest.TestCase):
         ("carga", "MIUDEZAS COMESTIVEIS", "02061000"),
     ]
 
+    # A ficha antiga vem com CODIGO. O popup tem de achar por codigo tambem:
+    # o de porto e alfanumerico ('BRIOS'), o de empresa e numerico.
+    CASOS_CODIGO = [
+        ("porto_ant", "BRIOS", "BRIOS"),
+        ("agencia", "30010", "30010"),
+        ("agencia", "30010 - MARINAV", "30010"),
+    ]
+
     @classmethod
     def setUpClass(cls):
         from playwright.sync_api import sync_playwright
@@ -55,6 +63,16 @@ class TestLookupNoQas(unittest.TestCase):
 
     def test_resolve_por_nome(self):
         for chave, termo, codigo_esperado in self.CASOS:
+            campo = next(c for c in lookup_engine.CAMPOS if c.chave == chave)
+            ok, cands = browser.resolver_lookup_popup(self.page, campo, termo)
+            self.assertTrue(ok, f"{chave}: nao resolveu '{termo}' (candidatos={cands})")
+            visivel = self.page.locator(campo.seletor_visivel).first.input_value().strip()
+            self.assertEqual(visivel, codigo_esperado, f"{chave}: visivel='{visivel}'")
+            hidden = self.page.locator(campo.seletor_hidden).first.input_value().strip()
+            self.assertTrue(hidden, f"{chave}: hidden vazio")
+
+    def test_resolve_por_codigo(self):
+        for chave, termo, codigo_esperado in self.CASOS_CODIGO:
             campo = next(c for c in lookup_engine.CAMPOS if c.chave == chave)
             ok, cands = browser.resolver_lookup_popup(self.page, campo, termo)
             self.assertTrue(ok, f"{chave}: nao resolveu '{termo}' (candidatos={cands})")
