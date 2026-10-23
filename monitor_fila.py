@@ -11,6 +11,7 @@
 - A trava anti-PRODUCAO continua independente, no `run.py`: URL de producao
   exige `PERMITIR_PROD=1`, entao ligar o monitor nao libera producao sozinho.
 - Uso: `python monitor_fila.py [--intervalo 10] [--uma-vez] [--simular]`
+- Servico da ficha unica (opt-in): `python monitor_fila.py --servico [--uma-vez]`
 """
 from __future__ import annotations
 
@@ -24,6 +25,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DADOS_RPA = ROOT / "dados_rpa"
 ENTRADA = ROOT / "entrada"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from anuncio_navio import caminhos, config, notificar, trava  # noqa: E402
+
+MSG_OCUPADA = "Feche a planilha para o robô processar."
+_SEM_NOTIFICACAO = object()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -124,6 +132,84 @@ def verificar_uma_vez(simular: bool = False) -> bool:
     return True
 
 
+def _abrir_log_servico(root: Path) -> logging.FileHandler:
+    destino = caminhos.logs_dir(root)
+    destino.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(destino / "servico.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%d/%m/%Y %H:%M:%S",
+    ))
+    logging.getLogger().addHandler(handler)
+    return handler
+
+
+def _mtime_ficha(root: Path):
+    try:
+        return caminhos.ficha(root).stat().st_mtime
+    except OSError:
+        return None
+
+
+def modo_servico(intervalo: float, uma_vez: bool, *, processar_fn=None,
+                 dormir=time.sleep) -> int:
+    """Loop do servico da ficha unica, protegido pela trava de instancia."""
+    root = caminhos.home()
+    handler = _abrir_log_servico(root)
+    lock = caminhos.logs_dir(root) / "servico.lock"
+    adquirida = False
+    try:
+        adquirida = trava.adquirir(lock)
+        if not adquirida:
+            logger.info(f"Outra instancia do servico esta ativa ({lock}); saindo.")
+            return 0
+
+        if processar_fn is None:
+            from anuncio_navio import servico
+            processar_fn = servico.processar
+
+        cfg = config.Config.from_env(caminhos.config_env(root))
+
+        if uma_vez:
+            try:
+                processar_fn(root, cfg)
+            except KeyboardInterrupt:
+                logger.info("Servico interrompido pelo usuario.")
+            except Exception as e:
+                logger.error(f"Erro no ciclo do servico: {type(e).__name__}: {e}")
+            return 0
+
+        logger.info(f"Servico da ficha unica ativo em {root} "
+                    f"(a cada {intervalo:g}s)... (Ctrl+C para parar)")
+        notificado_mtime = _SEM_NOTIFICACAO
+        try:
+            while True:
+                try:
+                    resultado = processar_fn(root, cfg)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as e:
+                    logger.error(f"Erro no ciclo do servico (seguindo): "
+                                 f"{type(e).__name__}: {e}")
+                else:
+                    if getattr(resultado, "estado", "") == "ocupada":
+                        mtime = _mtime_ficha(root)
+                        if mtime != notificado_mtime:
+                            notificar.notificar("Anúncio", MSG_OCUPADA)
+                            notificado_mtime = mtime
+                    else:
+                        notificado_mtime = _SEM_NOTIFICACAO
+                dormir(max(intervalo, 1))
+        except KeyboardInterrupt:
+            logger.info("Servico interrompido pelo usuario.")
+            return 0
+    finally:
+        if adquirida:
+            trava.liberar(lock)
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Monitora dados_rpa/ e dispara o RPA a cada novidade.")
     ap.add_argument("--intervalo", type=float, default=10, help="segundos entre verificacoes (padrao: 10)")
@@ -131,7 +217,12 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="log discreto de 'sem pendencias' a cada ciclo")
     ap.add_argument("--simular", action="store_true",
                     help="so valida a fila (--dry-run), sem abrir o browser")
+    ap.add_argument("--servico", action="store_true",
+                    help="servico da ficha unica (trava de instancia + loop)")
     args = ap.parse_args()
+
+    if args.servico:
+        return modo_servico(args.intervalo, args.uma_vez)
 
     logger.info(f"Monitorando {DADOS_RPA} (e convertendo fichas de {ENTRADA}) "
                 f"a cada {args.intervalo:g}s... (Ctrl+C para parar)")
