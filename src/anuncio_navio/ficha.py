@@ -24,7 +24,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from . import caminhos, historico
+from . import caminhos, historico, planilha
 
 MODELO = Path(__file__).resolve().parent / "recursos" / "ficha_modelo.xlsx"
 ABA_ANUNCIO = "Anúncio"
@@ -32,6 +32,74 @@ ABA_HISTORICO = "HISTÓRICO"
 ARQ_ESTADO = "data/estado_ficha.json"
 CELULA_STATUS = "C3"
 FORMATO_NOME = "%Y%m%d_%H%M%S"
+
+ROTULOS_PT = {
+    "nome_navio": "NOME DO NAVIO",
+    "imo": "IMO",
+    "agencia": "AGÊNCIA",
+    "armador": "ARMADOR",
+    "operador": "OPERADOR",
+    "porto_ant": "ÚLTIMO PORTO",
+    "porto_prox": "PRÓXIMO PORTO",
+    "berco": "BERÇO",
+    "afretador": "AFRETADOR",
+    "carga": "CARGA",
+    "qtd": "QUANTIDADE",
+    "loa": "LOA",
+    "eta_data": "ETA DATA",
+    "eta_hora": "ETA HORA",
+    "etb_data": "ETB DATA",
+    "etb_hora": "ETB HORA",
+    "etc_data": "ETC DATA",
+    "etc_hora": "ETC HORA",
+    "ets_data": "ETS DATA",
+    "ets_hora": "ETS HORA",
+    "calado_cheg_proa": "CALADO CHEGADA PROA",
+    "calado_cheg_popa": "CALADO CHEGADA POPA",
+    "calado_sai_proa": "CALADO SAÍDA PROA",
+    "calado_sai_popa": "CALADO SAÍDA POPA",
+    "tipo_viagem": "TIPO DE VIAGEM",
+    "tipo_operacao": "TIPO DE OPERAÇÃO",
+    "sentido": "SENTIDO",
+    "natureza": "NATUREZA",
+}
+
+_PREFIXO_VAZIO = "Campo obrigatorio vazio: "
+_PREFIXO_IMO = "IMO deve ter"
+
+
+def _traduzir_pendencia(mensagem: str) -> str:
+    if mensagem.startswith(_PREFIXO_VAZIO) and mensagem.endswith("."):
+        chave = mensagem[len(_PREFIXO_VAZIO):-1].strip()
+        return ROTULOS_PT.get(chave, chave)
+    if mensagem.startswith(_PREFIXO_IMO):
+        return "IMO deve ter 7 números"
+    return mensagem
+
+
+def ler(root: Path) -> tuple[dict, list[str]]:
+    """Le a ficha por copia em `tmp/` e devolve campos e pendencias em portugues."""
+    root = Path(root)
+    origem = caminhos.ficha(root)
+    tmp = caminhos.tmp_dir(root)
+    tmp.mkdir(parents=True, exist_ok=True)
+    copia = tmp / f"ficha_{time.time_ns()}.xlsx"
+    try:
+        shutil.copyfile(origem, copia)
+        campos = planilha.ler_planilha(copia)
+        pendencias = [_traduzir_pendencia(e) for e in planilha.validar_campos(campos)]
+        return campos, pendencias
+    finally:
+        copia.unlink(missing_ok=True)
+
+
+def mensagem_invalida(pendencias: list[str]) -> str:
+    """Monta o veredito da C3: campos faltando ou o motivo tecnico."""
+    if pendencias and all("deve" not in p for p in pendencias):
+        return (f"NÃO FOI ENVIADO — faltam {len(pendencias)} campo(s): "
+                f"{', '.join(pendencias)}. Corrija e salve de novo.")
+    return (f"NÃO FOI ENVIADO — {'; '.join(pendencias)}. "
+            "Corrija e salve de novo.")
 
 
 def _lsof_padrao(path: Path) -> str:
