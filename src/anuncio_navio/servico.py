@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,10 +103,9 @@ def processar(
         return Resultado("sem_ficha")
     if ficha.ja_tentada(root, p):
         return Resultado("sem_novidade")
-    # O loop so chama o ciclo quando a ficha mudou; a janela de 5 s do
-    # `esta_livre` faria toda ficha recem-salva virar "ocupada". Lock/lsof
-    # continuam barrando a planilha aberta.
-    if not ficha.esta_livre(p, agora=agora, estavel_seg=0):
+    # Respeita a janela de 5 s do `esta_livre`: ficha recem-salva ainda pode
+    # estar sendo gravada. Lock/lsof continuam barrando a planilha aberta.
+    if not ficha.esta_livre(p, agora=agora or time.time()):
         return Resultado("ocupada")
 
     campos, pendencias = ficha.ler(root)

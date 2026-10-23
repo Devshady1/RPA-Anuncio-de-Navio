@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -26,6 +27,11 @@ class TestProcessar(unittest.TestCase):
         "C27": "INTERMARIT", "C28": "AEC SHIPPING",
     }
 
+    def _envelhecer(self, p):
+        velho = time.time() - 60
+        os.utime(p, (velho, velho))
+        return p
+
     def _ficha(self, root, campos=None):
         p = root / "ficha" / "ficha_anuncio_navio.xlsx"
         shutil.copyfile(MODELO, p)
@@ -33,7 +39,7 @@ class TestProcessar(unittest.TestCase):
         for cel, v in (campos or self.CAMPOS).items():
             wb["Anúncio"][cel] = v
         wb.save(p)
-        return p
+        return self._envelhecer(p)
 
     def _root_preenchido(self, t):
         root = Path(t)
@@ -67,7 +73,9 @@ class TestProcessar(unittest.TestCase):
     def test_invalida_mantem_a_ficha_e_nao_reserva_viagem(self):
         with TemporaryDirectory() as t:
             root = Path(t); (root / "ficha").mkdir()
-            shutil.copyfile(MODELO, root / "ficha" / "ficha_anuncio_navio.xlsx")
+            p = root / "ficha" / "ficha_anuncio_navio.xlsx"
+            shutil.copyfile(MODELO, p)
+            self._envelhecer(p)
             r = servico.processar(root, self._cfg(root), executar=lambda c, d: "x",
                                   notificar_fn=lambda ti, tx: None)
             self.assertEqual(r.estado, "invalida")
@@ -113,7 +121,9 @@ class TestProcessar(unittest.TestCase):
     def test_ficha_parada_nao_roda_de_novo(self):
         with TemporaryDirectory() as t:
             root = Path(t); (root / "ficha").mkdir()
-            shutil.copyfile(MODELO, root / "ficha" / "ficha_anuncio_navio.xlsx")
+            p = root / "ficha" / "ficha_anuncio_navio.xlsx"
+            shutil.copyfile(MODELO, p)
+            self._envelhecer(p)
             cfg = self._cfg(root)
             servico.processar(root, cfg, executar=lambda c, d: "x", notificar_fn=lambda ti, tx: None)
             r = servico.processar(root, cfg, executar=lambda c, d: "x", notificar_fn=lambda ti, tx: None)
