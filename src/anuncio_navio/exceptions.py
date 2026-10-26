@@ -12,3 +12,7 @@ class LookupError(AnuncioError):
 
 class VerificacaoError(AnuncioError):
     pass
+
+
+class AnuncioEmAndamentoError(AnuncioError):
+    pass

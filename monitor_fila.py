@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -151,6 +152,29 @@ def _mtime_ficha(root: Path):
         return None
 
 
+def _bloqueado_servico(cfg) -> bool:
+    """Em produção, o serviço exige autorização e confirmação explícitas."""
+    if cfg.ambiente == "QAS":
+        return False
+    if cfg.ambiente != "PRODUCAO":
+        logger.error("Servico bloqueado: URL/ambiente nao reconhecido (%s).", cfg.url)
+        return True
+    faltando = [
+        nome for nome in ("PERMITIR_PROD", "CONFIRMAR_ANUNCIO")
+        if os.environ.get(nome) != "1"
+    ]
+    if faltando:
+        logger.error(
+            "Servico bloqueado em PRODUCAO: configure explicitamente %s.",
+            " e ".join(faltando),
+        )
+        return True
+    logger.warning(
+        "PERMITIR_PROD=1 e CONFIRMAR_ANUNCIO=1: servico REAL contra PRODUCAO autorizado."
+    )
+    return False
+
+
 def modo_servico(intervalo: float, uma_vez: bool, *, processar_fn=None,
                  dormir=time.sleep) -> int:
     """Loop do servico da ficha unica, protegido pela trava de instancia."""
@@ -169,6 +193,8 @@ def modo_servico(intervalo: float, uma_vez: bool, *, processar_fn=None,
             processar_fn = servico.processar
 
         cfg = config.Config.from_env(caminhos.config_env(root))
+        if _bloqueado_servico(cfg):
+            return 2
 
         if uma_vez:
             try:

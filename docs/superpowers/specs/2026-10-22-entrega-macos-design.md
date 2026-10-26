@@ -95,16 +95,18 @@ lugar. Se algo falhar, **nada é perdido**: a planilha fica no lugar com o motiv
     original atomicamente (`os.replace`); só processa com mtime estável ≥5 s e sem lock de
     LibreOffice (`.~lock.*#`). Se o arquivo mudar durante o processamento, aborta e tenta no ciclo
     seguinte. Duplicata (mesmo IMO+ETA em `status.json` já anunciado, item 19) é arquivada sem anunciar.
-12. **Instância única** (lock `fcntl` em `logs/`, herdado pelo serviço) e **log rotativo**
+12. **Instância única** (lock exclusivo do sistema operacional em `logs/`; `fcntl` no macOS,
+    `msvcrt` no Windows) e **log rotativo**
     (30 dias) em `logs/`.
 13. **Orquestração**: o serviço observa só `ficha/`; a conversão é a mesma que já existe
     (`planilha.construir_payload` + validações de `inserir.py`) e o anúncio chama as funções do
     `run.py` **no próprio processo** (sem subprocesso, sem depender de PATH). O JSON continua
     sendo gerado em `data/json/` como contrato/evidência de integração, mas quem anuncia é a
     biblioteca — `run.py --fila` segue funcionando para integradores externos.
-14. **Senha em runtime**: `Config.from_env` lê `OPENPORT_SENHA` do ambiente e, se ausente, busca
-    no Keychain (`security find-generic-password -s com.codeba.anuncionavio.openport -w`) — sem
-    dependência nova. O `config/.env` guarda só URL, flags e login.
+14. **Senha em runtime**: `Config.from_env` lê `OPENPORT_SENHA` do ambiente e, se ausente no
+    macOS, busca no Keychain (`security find-generic-password -s
+    com.codeba.anuncionavio.openport -w`) — sem dependência nova. O `config/.env` guarda só URL,
+    flags e login.
 15. **`ANUNCIO_ROOT`** (nome já usado no código) é o resolvedor: no Mac o plist o aponta para
     `~/CODEBA/AnuncioNavio` e define `PLAYWRIGHT_BROWSERS_PATH`; sem a variável, a raiz é o repo
     (desenvolvimento/QAS continuam iguais, com `dados_rpa/`).
@@ -187,6 +189,10 @@ recarrega o LaunchAgent → notifica a versão. Se a nova versão falhar no smok
 `app/` anterior (guarda `app.anterior/`).
 
 ## 11. Riscos e perguntas em aberto
+
+- A inicialização automática não deve ser habilitada para produção até haver autorização
+  expressa do usuário; o pacote não deve ativar `PERMITIR_PROD` nem `CONFIRMAR_ANUNCIO` por
+  padrão.
 
 1. **Rede corporativa**: o Mac do agente alcança `openportilheus.codeba.gov.br` fora da CODEBA?
    (smoke test responde no dia da instalação.)

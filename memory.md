@@ -479,3 +479,79 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
 - A prova real do serviço no QAS foi uma execução separada da suíte unitária
   offline e dos testes QAS opt-in existentes, que evitam clicar nos botões de
   gravação.
+
+### 10.5 Hardening para preparação do macOS (26/10/2026)
+
+- Em andamento, após o commit publicado `bae27c6` (`feat/ficha-unica-servico`):
+  classificação de ambiente estrita (endpoints oficiais HTTPS apenas), bloqueio
+  do serviço para URL desconhecida e PRODUÇÃO sem `PERMITIR_PROD=1` +
+  `CONFIRMAR_ANUNCIO=1`, e lock exclusivo mantido pelo SO (`msvcrt` no Windows,
+  `fcntl.flock` em macOS/Linux).
+- `Config.from_env` agora tem fallback de senha para o Keychain do macOS com
+  serviço `com.codeba.anuncionavio.openport`; `OPENPORT_SENHA` continua tendo
+  precedência. A senha não é registrada pelo código.
+- Testes unitários offline dos gates, Keychain mockado e lock aprovados; suíte
+  completa aprovada: 141 testes, 4 testes QAS opt-in ignorados. Nenhum acesso a
+  QAS/produção ocorreu nesta atualização.
+- Essas alterações ainda estão no worktree e não foram commitadas/publicadas.
+  A instalação do macOS (pacote de runtime/Playwright, LaunchAgent e fluxo de
+  configuração) segue não implementada e requer validação em Mac real, modelo/
+  arquitetura do equipamento e decisões operacionais do agente.
+
+### 10.6 Política de ambiente durante testes e no Mac
+
+- Durante o desenvolvimento/testes, a URL padrão local é QAS. Produção só é
+  usada quando o usuário pedir explicitamente; os gates atuais permanecem.
+- A instalação operacional no Mac será apontada para produção para processar
+  as fichas do agente sem confirmação por execução. O instalador poderá definir
+  as flags operacionais necessárias, sem remover os gates globais do código.
+- Trava de instância é diferente de autorização de ambiente: impede dois
+  serviços concorrentes e permanece habilitada também no Mac.
+- Cada anúncio também adquire uma trava global durante todo o processamento,
+  compartilhada pelo serviço e pelas entradas de linha de comando. Um segundo
+  anúncio concorrente é recusado explicitamente; a trava é liberada ao concluir
+  ou quando o processo termina.
+- Nenhum acesso ao QAS ou à produção foi feito nesta atualização. A implementação
+  de instalação aguarda modelo/arquitetura do Mac e aplicativo de planilha.
+
+### 10.7 Teste ponta a ponta QAS após trava de anúncio único (26/10/2026)
+
+- Autorizado pelo usuário nesta conversa; executado exatamente um ciclo pelo
+  serviço, com raiz temporária isolada, endpoint QAS explícito e confirmação
+  habilitada. Nenhum acesso à produção.
+- Resultado confirmado: VOYAGER, IMO `9553256`, viagem/DUV `009998`, ETA
+  `28/12/2026 07:30`, programação `1782`, status `Anunciado`; conferido na
+  tela 2001. O ciclo marcou `OK` e arquivou o JSON na raiz temporária, removida
+  ao final.
+- Uma tentativa anterior foi interrompida na validação dos lookups por perda de
+  acentos na codificação do terminal; não chegou a Gravar. O teste válido foi
+  repetido com Unicode corrigido e confirmado.
+- O registro `009998` permanece no QAS; não repetir essa viagem/ETA.
+
+### 10.8 Handoff para próximos agentes (26/10/2026)
+
+- Estado atual: preparação local validada no Windows; suíte completa com **143
+  testes aprovados e 4 testes QAS opt-in ignorados**. Teste e2e do serviço no
+  QAS aprovado como descrito em 10.7. Não acessar QAS/PROD sem autorização
+  explícita; não repetir o caso VOYAGER `9553256`, viagem/DUV `009998`, ETA
+  `28/12/2026 07:30`.
+- Política acordada: durante desenvolvimento, QAS é o padrão; produção só
+  quando o usuário solicitar. Na instalação operacional no Mac, o serviço será
+  configurado para produção e processará as fichas sem confirmação por execução.
+- Segurança/concorrência: manter os gates atuais para ambiente desconhecido e
+  uso de produção no desenvolvimento; preservar a trava que permite somente
+  um anúncio em andamento. A trava de anúncio é diferente da trava que evita
+  duas instâncias do serviço.
+- Trabalho local ainda **não commitado nem publicado**: endpoints fail-closed,
+  gates de produção no serviço, locks do SO, fallback da senha via Keychain,
+  QAS como URL padrão durante desenvolvimento e testes de anúncio único.
+- Pendências para fechar entrega Mac:
+  1. obter modelo/arquitetura do Mac e aplicativo de planilha instalado;
+  2. implementar runtime/navegador empacotados, instalador, Keychain e
+     LaunchAgent;
+  3. instalar e validar no Mac real, incluindo fluxo da planilha e lock;
+  4. configurar o ambiente do Mac para produção sem confirmação por execução,
+     mantendo anúncio único;
+  5. revisar e depois commitar/publicar as mudanças locais.
+- O usuário informou que ainda não sabe modelo/arquitetura nem app de planilha;
+  a suspensão é aceitável, desde que o Mac esteja acordado durante o uso.

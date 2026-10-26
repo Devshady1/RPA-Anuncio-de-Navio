@@ -3,14 +3,26 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-from . import browser
+from . import browser, caminhos, trava
 from . import navegacao, anuncio, status, relatorio, verificar
-from .exceptions import AnuncioError, VerificacaoError
+from .exceptions import AnuncioEmAndamentoError, AnuncioError, VerificacaoError
 
 logger = logging.getLogger("anuncio.main")
 
 
 def executar_um(config, dados: dict) -> str:
+    lock = caminhos.logs_dir(config.project_root) / "anuncio.lock"
+    if not trava.adquirir(lock):
+        raise AnuncioEmAndamentoError(
+            "Outro anúncio já está em execução. Aguarde a conclusão antes de iniciar outro."
+        )
+    try:
+        return _executar_um(config, dados)
+    finally:
+        trava.liberar(lock)
+
+
+def _executar_um(config, dados: dict) -> str:
     logger.info(f"Ambiente: {getattr(config, 'ambiente', '?')} — {config.url}")
     if status.ja_feito(config, dados):
         logger.info(f"Ja feito {dados['imo']}_{dados['viagem']}, pulando (anti-duplicidade).")

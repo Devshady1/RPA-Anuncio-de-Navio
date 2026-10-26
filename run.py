@@ -22,8 +22,12 @@ def bloqueado_prod(cfg) -> bool:
 
     Retorna True se deve BLOQUEAR (sem abrir navegador). QAS sempre libera.
     """
-    if cfg.ambiente != "PRODUCAO":
+    if cfg.ambiente == "QAS":
         return False
+    if cfg.ambiente != "PRODUCAO":
+        print(f"BLOQUEADO: ambiente nao reconhecido para a URL {cfg.url}.")
+        logger.error(f"Bloqueio por URL nao reconhecida: {cfg.url}")
+        return True
     if os.environ.get("PERMITIR_PROD") == "1":
         logger.warning("PERMITIR_PROD=1: operacao REAL contra PRODUCAO autorizada.")
         return False

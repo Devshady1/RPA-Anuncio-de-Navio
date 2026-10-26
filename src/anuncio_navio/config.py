@@ -1,6 +1,10 @@
 import os
+import logging
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -8,7 +12,9 @@ from dotenv import load_dotenv
 # URLs base do OpenPort. QAS = homologacao, PROD = oficial (padrao de operacao).
 URL_QAS = "https://ilheus.codeba.gov.br/qas/openportcodeba/"
 URL_PROD = "https://openportilheus.codeba.gov.br/openportcodeba/"
-URL_PADRAO = URL_PROD
+URL_PADRAO = URL_QAS
+KEYCHAIN_SERVICE = "com.codeba.anuncionavio.openport"
+logger = logging.getLogger("anuncio.config")
 
 # Classificacao padrao do anuncio (decisao de 14/10/2026): todo anuncio sai
 # como LONGO CURSO / movimentacao de carga / exportacao / solido, e a correcao
@@ -31,8 +37,50 @@ def aplicar_classificacao_padrao(campos: dict) -> dict:
 
 
 def detectar_ambiente(url: str) -> str:
-    """Retorna 'QAS' se a URL contiver 'qas', senao 'PRODUCAO'."""
-    return "QAS" if "qas" in (url or "").lower() else "PRODUCAO"
+    """Classifica apenas os endpoints oficiais; URLs desconhecidas falham fechadas."""
+    try:
+        parsed = urlsplit(url or "")
+        host = (parsed.hostname or "").lower()
+        path = parsed.path.rstrip("/")
+        port = parsed.port
+    except ValueError:
+        return "DESCONHECIDO"
+
+    if (
+        parsed.scheme.lower() != "https"
+        or port not in (None, 443)
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        return "DESCONHECIDO"
+    if host == "ilheus.codeba.gov.br" and path == "/qas/openportcodeba":
+        return "QAS"
+    if host == "openportilheus.codeba.gov.br" and path == "/openportcodeba":
+        return "PRODUCAO"
+    return "DESCONHECIDO"
+
+
+def _senha_keychain() -> str:
+    """Busca senha no Keychain do macOS sem passar por shell nem registrar o segredo."""
+    if sys.platform != "darwin":
+        return ""
+    try:
+        resultado = subprocess.run(
+            ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Nao foi possivel consultar a senha no Keychain: %s", type(exc).__name__)
+        return ""
+    if resultado.returncode != 0:
+        logger.warning("Senha do OpenPort nao encontrada no Keychain (%s).", resultado.returncode)
+        return ""
+    return resultado.stdout.rstrip("\r\n")
 
 
 @dataclass(frozen=True)
@@ -132,10 +180,14 @@ class Config:
             "natureza": {"1": "SOLIDO", "2": "LIQUIDO", "3": "GASOSO", "4": "CARGA GERAL", "5": "CONTEINER", "6": "PASSAGEIROS"},
         }
 
+        senha = os.getenv("OPENPORT_SENHA", "")
+        if not senha:
+            senha = _senha_keychain()
+
         return cls(
             url=url_override or os.getenv("OPENPORT_URL", URL_PADRAO),
             login=os.getenv("OPENPORT_LOGIN", ""),
-            senha=os.getenv("OPENPORT_SENHA", ""),
+            senha=senha,
             headless=headless,
             primeiro_plano=primeiro_plano,
             timeout_ms=int(os.getenv("TIMEOUT_MS", "30000")),
