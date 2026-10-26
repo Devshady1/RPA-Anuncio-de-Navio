@@ -493,10 +493,10 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
 - Testes unitários offline dos gates, Keychain mockado e lock aprovados; suíte
   completa aprovada: 141 testes, 4 testes QAS opt-in ignorados. Nenhum acesso a
   QAS/produção ocorreu nesta atualização.
-- Essas alterações ainda estão no worktree e não foram commitadas/publicadas.
-  A instalação do macOS (pacote de runtime/Playwright, LaunchAgent e fluxo de
-  configuração) segue não implementada e requer validação em Mac real, modelo/
-  arquitetura do equipamento e decisões operacionais do agente.
+- As alterações de hardening foram publicadas no commit `0f2013e` da branch
+  `feat/ficha-unica-servico`. A instalação do macOS (pacote de runtime/Playwright,
+  LaunchAgent e fluxo de configuração) segue não implementada e requer validação
+  em Mac real, modelo/arquitetura do equipamento e decisões operacionais do agente.
 
 ### 10.6 Política de ambiente durante testes e no Mac
 
@@ -530,7 +530,8 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
 
 ### 10.8 Handoff para próximos agentes (26/10/2026)
 
-- Estado atual: preparação local validada no Windows; suíte completa com **143
+- Estado antes da atualização de retorno do número: preparação local validada no
+  Windows; suíte completa com **143
   testes aprovados e 4 testes QAS opt-in ignorados**. Teste e2e do serviço no
   QAS aprovado como descrito em 10.7. Não acessar QAS/PROD sem autorização
   explícita; não repetir o caso VOYAGER `9553256`, viagem/DUV `009998`, ETA
@@ -542,9 +543,10 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   uso de produção no desenvolvimento; preservar a trava que permite somente
   um anúncio em andamento. A trava de anúncio é diferente da trava que evita
   duas instâncias do serviço.
-- Trabalho local ainda **não commitado nem publicado**: endpoints fail-closed,
-  gates de produção no serviço, locks do SO, fallback da senha via Keychain,
-  QAS como URL padrão durante desenvolvimento e testes de anúncio único.
+- As alterações de hardening e de serviço descritas acima foram publicadas no
+  commit `0f2013e4428d73778f524cd2c87a1fb482ba50c0` da branch
+  `feat/ficha-unica-servico`. Esta atualização também publica o retorno do
+  número da requisição, os ajustes nos geradores de relatório e este registro.
 - Pendências para fechar entrega Mac:
   1. obter modelo/arquitetura do Mac e aplicativo de planilha instalado;
   2. implementar runtime/navegador empacotados, instalador, Keychain e
@@ -555,3 +557,47 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   5. revisar e depois commitar/publicar as mudanças locais.
 - O usuário informou que ainda não sabe modelo/arquitetura nem app de planilha;
   a suspensão é aceitável, desde que o Mac esteja acordado durante o uso.
+- Atualização do usuário (26/10/2026): o notebook do agente marítimo é “Neo”.
+  Confirmar o modelo completo e sistema operacional antes de definir o pacote;
+  não presumir que seja Apple Silicon/macOS só pelo nome “Neo”. O aplicativo de
+  planilha segue sem confirmação.
+
+### 10.9 Redesign do relatório de produção (26/10/2026)
+
+- O usuário considerou inferior o layout do relatório atual e pediu uma proposta
+  visual melhor. Foi criado um redesign em três páginas: resumo executivo e
+  status em destaque; dados operacionais/timeline com ressalvas; evidências
+  visuais e referências de auditoria.
+- Gerador atualizado em `ferramentas/relatorio_prod.py`. O PDF original foi
+  mantido e a prévia foi gerada como
+  `relatorios/RELATORIO_PROD_TI_SUNRISE_000006_20261013_REVISADO.pdf`.
+- A prévia foi aberta no visualizador integrado para revisão do usuário. O PDF
+  tem 3 páginas verificadas e o script compila. O gerador redesenhado é publicado
+  nesta atualização; o PDF original permanece intacto e os PDFs gerados ficam
+  locais (não versionados).
+
+### 10.10 Retorno do número da requisição (26/10/2026)
+
+- Solicitação: devolver ao agente marítimo o número da requisição junto com o
+  status do anúncio, para que ele possa informar esse identificador.
+- No OpenPort, o identificador confirmado na consulta 2001 está na coluna
+  `Progr.`; o código o apresenta como **número da requisição (Programação)**,
+  mantendo distinto o número da viagem/DUV.
+- Implementação local: a confirmação da 2001 retorna `Progr.` somente após
+  validar o registro e seu cabeçalho; a execução transporta DUV e requisição
+  em resultado tipado. O serviço registra o número em `status.json` e no
+  histórico, mostra status + número na notificação ao agente e escreve o
+  resultado na C3 da ficha arquivada. Sucesso fica em verde; alertas permanecem
+  em vermelho. A rota de duplicidade também recupera o número anteriormente
+  salvo, quando disponível.
+- Se a execução não devolver o número, a ficha fica pendente de conferência e
+  não é arquivada como sucesso. A mensagem alerta que o anúncio pode já ter
+  sido registrado e orienta a confirmar antes de tentar novamente, evitando
+  um reenvio automático.
+- Verificação local concluída: **144 testes passaram; 4 testes opt-in de QAS
+  foram ignorados**. Os testes focados do serviço, verificação e trava também
+  passaram. PDF/DOCX da nota gerencial foram regenerados e o DOCX contém o
+  texto atualizado. Nenhum acesso a QAS ou produção foi feito.
+- Implementação, testes, gerador da nota gerencial e este handoff publicados na
+  branch `feat/ficha-unica-servico` nesta atualização. PDFs e DOCX gerados ficam
+  locais; nenhum acesso a QAS/produção foi feito para esta alteração.

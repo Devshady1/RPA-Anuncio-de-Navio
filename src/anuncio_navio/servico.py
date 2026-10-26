@@ -24,6 +24,7 @@ from . import (
     status,
 )
 from .exceptions import LoginError, LookupError
+from .resultado import ExecucaoAnuncio
 
 logger = logging.getLogger("anuncio.servico")
 
@@ -36,6 +37,7 @@ class Resultado:
     estado: str
     mensagem: str = ""
     duv: str = ""
+    numero_requisicao: str = ""
 
 
 def _avisar(notificar_fn, titulo: str, texto: str) -> None:
@@ -46,9 +48,14 @@ def _avisar(notificar_fn, titulo: str, texto: str) -> None:
         logger.warning(f"Falha ao notificar: {exc}")
 
 
-def _notificar_duplicado(notificar_fn, duv: str) -> None:
+def _notificar_duplicado(notificar_fn, duv: str, numero_requisicao: str = "") -> None:
+    detalhes = []
+    if numero_requisicao:
+        detalhes.append(f"Requisição nº {numero_requisicao} (Programação)")
     if duv:
-        texto = f"Este navio já foi anunciado (DUV {duv}). A ficha foi arquivada."
+        detalhes.append(f"viagem/DUV {duv}")
+    if detalhes:
+        texto = f"Este navio já foi anunciado — {'; '.join(detalhes)}. A ficha foi arquivada."
     else:
         texto = "Este navio já foi anunciado. A ficha foi arquivada."
     _avisar(notificar_fn, "Anúncio", texto)
@@ -120,14 +127,19 @@ def processar(
     payload = planilha.construir_payload(campos)
     dup = status.mesmo_anuncio(cfg, payload)
     if dup:
+        numero_requisicao = status.numero_requisicao_mesmo_anuncio(cfg, payload)
         imo = payload.get("imo", "")
         viagem = payload.get("viagem", "")
         ficha.arquivar(root, p, imo=imo, viagem=viagem, duv=dup)
-        _registrar(root, payload, "JÁ ANUNCIADO", duv=dup, quando=agora)
+        _registrar(
+            root, payload, "JÁ ANUNCIADO", duv=dup,
+            detalhe=f"REQUISICAO={numero_requisicao}" if numero_requisicao else "",
+            quando=agora,
+        )
         ficha.gerar_nova(root)
         ficha.marcar_estado(root, caminhos.ficha(root))
-        _notificar_duplicado(notificar_fn, dup)
-        return Resultado("duplicado", duv=dup)
+        _notificar_duplicado(notificar_fn, dup, numero_requisicao)
+        return Resultado("duplicado", duv=dup, numero_requisicao=numero_requisicao)
 
     payload["viagem"] = sequencia.proxima(root)
     arquivo = caminhos.json_dir(root) / f"{payload.get('imo','')}_{payload['viagem']}.json"
@@ -137,7 +149,7 @@ def processar(
     executar = executar or main.executar_um
     try:
         dados = fila_json.carregar_anuncio(arquivo)
-        duv = executar(cfg, dados) or ""
+        execucao = executar(cfg, dados)
     except LoginError as erro:
         return _falhou(root, p, arquivo, payload, erro, MSG_SENHA, notificar_fn, agora)
     except LookupError as erro:
@@ -154,28 +166,63 @@ def processar(
             notificar_fn, agora,
         )
 
+    if isinstance(execucao, ExecucaoAnuncio):
+        duv = execucao.duv
+        numero_requisicao = execucao.numero_requisicao
+    else:
+        duv = execucao or ""
+        numero_requisicao = ""
+
     imo = payload.get("imo", "")
     viagem = payload["viagem"]
     if duv == "duplicado":
+        numero_requisicao = numero_requisicao or status.numero_requisicao_mesmo_anuncio(cfg, payload)
         ficha.arquivar(root, p, imo=imo, viagem=viagem, duv="")
-        _registrar(root, payload, "JÁ ANUNCIADO", quando=agora)
+        _registrar(
+            root, payload, "JÁ ANUNCIADO",
+            detalhe=f"REQUISICAO={numero_requisicao}" if numero_requisicao else "",
+            quando=agora,
+        )
         ficha.gerar_nova(root)
         ficha.marcar_estado(root, caminhos.ficha(root))
-        _notificar_duplicado(notificar_fn, "")
+        _notificar_duplicado(notificar_fn, "", numero_requisicao)
         return Resultado(
             "duplicado",
             mensagem="Este navio já foi anunciado. A ficha foi arquivada.",
             duv="",
+            numero_requisicao=numero_requisicao,
         )
 
+    if not numero_requisicao:
+        mensagem = (
+            "RESULTADO PENDENTE DE CONFERÊNCIA — o OpenPort não devolveu o "
+            "número da requisição/programação. O anúncio pode ter sido registrado; "
+            "confirme a situação antes de tentar novamente."
+        )
+        ficha.escrever_status(p, mensagem)
+        _registrar(root, payload, "SEM NÚMERO DA REQUISIÇÃO", duv=duv,
+                   detalhe=mensagem, quando=agora)
+        ficha.marcar_estado(root, p)
+        _avisar(notificar_fn, "Anúncio pendente de conferência", mensagem)
+        return Resultado("pendente", mensagem=mensagem, duv=duv)
+
+    ficha.escrever_status(
+        p,
+        f"ANÚNCIO CONFIRMADO — Requisição nº {numero_requisicao} "
+        f"(Programação). Viagem/DUV: {viagem}.",
+    )
     fila_json.finalizar_sucesso(arquivo, duv)
-    _registrar(root, payload, "OK", duv=duv, quando=agora)
+    _registrar(
+        root, payload, "OK", duv=duv,
+        detalhe=f"REQUISICAO={numero_requisicao}", quando=agora,
+    )
     ficha.arquivar(root, p, imo=imo, viagem=viagem, duv=duv)
     ficha.gerar_nova(root)
     ficha.marcar_estado(root, caminhos.ficha(root))
     _avisar(
         notificar_fn,
         "Anúncio",
-        f"Anúncio {imo} viagem {viagem} gravado — DUV {duv}.",
+        f"ANÚNCIO CONFIRMADO — Requisição nº {numero_requisicao} "
+        f"(Programação). Navio {imo}; viagem/DUV {viagem}.",
     )
-    return Resultado("ok", duv=duv)
+    return Resultado("ok", duv=duv, numero_requisicao=numero_requisicao)

@@ -144,8 +144,9 @@ def _preencher_data(page, css: str, data: str) -> None:
 
 
 def confirmado_na_2001(page, config, imo: str, eta, status_esperado=None,
-                       viagem: str = "", duv: str = "") -> bool:
-    """Retorna True apenas se a 2001 listar IMO/ETA/viagem no status esperado."""
+                       viagem: str = "", duv: str = "",
+                       retornar_programacao: bool = False) -> bool | str:
+    """Confirma na 2001; opcionalmente retorna o numero da requisicao/programacao."""
     if not _somente_digitos(str(imo or "")):
         raise VerificacaoError("IMO ausente: verificacao 2001 cancelada antes de marcar OK.")
     data = _data_filtro(eta)
@@ -234,7 +235,7 @@ def confirmado_na_2001(page, config, imo: str, eta, status_esperado=None,
                     progr, _somente_digitos(str(imo)), data, status_texto, duv_linha, duv,
                 )
                 browser.screenshot(page, config.project_root, "verificacao_2001_ok")
-                return True
+                return progr if retornar_programacao else True
         logger.warning(
             "Nao confirmado na 2001: IMO=%s ETA=%s status=%s.",
             _somente_digitos(str(imo)), data, ",".join(valores_status),

@@ -15,8 +15,8 @@ Uso tipico (ver run.py --fila):
     pendentes = listar_pendentes(pasta)
     for path in pendentes:
         dados = carregar_anuncio(path)   # <- substitui wizard.coletar()
-        duv = executar_um(cfg, dados)    # <- automacao OpenPort inalterada
-        finalizar_sucesso(path, duv)     # <- move p/ processados/
+        resultado = executar_um(cfg, dados)
+        finalizar_sucesso(path, resultado.duv)
 """
 from __future__ import annotations
 

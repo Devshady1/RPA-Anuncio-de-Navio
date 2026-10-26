@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import openpyxl
 
 from anuncio_navio import config, exceptions, historico, servico, status
+from anuncio_navio.resultado import ExecucaoAnuncio
 
 MODELO = Path(__file__).resolve().parents[1] / "src" / "anuncio_navio" / "recursos" / "ficha_modelo.xlsx"
 
@@ -59,16 +60,27 @@ class TestProcessar(unittest.TestCase):
             cfg = self._cfg(root)
             avisos = []
             def anunciar(c, d):
-                status.marcar_ok(c, d, "000010")   # executar_um real faz isso
-                return "000010"
+                status.marcar_ok(c, d, "000010", numero_requisicao="1778")
+                return ExecucaoAnuncio("000010", "1778")
             r = servico.processar(root, cfg, executar=anunciar,
                                   notificar_fn=lambda ti, tx: avisos.append((ti, tx)))
             self.assertEqual(r.estado, "ok")
             self.assertEqual(r.duv, "000010")
+            self.assertEqual(r.numero_requisicao, "1778")
+            self.assertIn("REQUISICAO=1778", status.resumo(cfg))
             self.assertEqual(list((root / "ficha" / "arquivo").glob("*.xlsx"))[0].name.count("DUV000010"), 1)
             self.assertTrue((root / "ficha" / "ficha_anuncio_navio.xlsx").exists())
             self.assertEqual(historico.linhas(root)[-1][5], "OK")
-            self.assertIn("DUV 000010", avisos[0][1])
+            self.assertIn("Requisição nº 1778", avisos[0][1])
+            arquivada = next((root / "ficha" / "arquivo").glob("*.xlsx"))
+            status_ficha = openpyxl.load_workbook(arquivada)["Anúncio"]["C3"].value
+            self.assertIn("Requisição nº 1778", status_ficha)
+            celula_status = openpyxl.load_workbook(arquivada)["Anúncio"]["C3"]
+            self.assertEqual(celula_status.font.color.rgb, "00006100")
+            self.assertEqual(celula_status.fill.fgColor.rgb, "00C6EFCE")
+            self.assertGreaterEqual(
+                openpyxl.load_workbook(arquivada)["Anúncio"].row_dimensions[3].height, 32,
+            )
 
     def test_invalida_mantem_a_ficha_e_nao_reserva_viagem(self):
         with TemporaryDirectory() as t:
@@ -101,8 +113,8 @@ class TestProcessar(unittest.TestCase):
             cfg = self._cfg(root)
             chamou = []
             def anunciar(c, d):
-                status.marcar_ok(c, d, "000010")
-                return "000010"
+                status.marcar_ok(c, d, "000010", numero_requisicao="1778")
+                return ExecucaoAnuncio("000010", "1778")
             servico.processar(root, cfg, executar=anunciar,
                               notificar_fn=lambda ti, tx: None)
             # simula a ficha antiga (ja arquivada) re-salva por cima da nova
@@ -111,11 +123,14 @@ class TestProcessar(unittest.TestCase):
             shutil.copyfile(arquivada, p)
             velho = p.stat().st_mtime - 60
             os.utime(p, (velho, velho))
+            avisos = []
             r = servico.processar(root, self._cfg(root),
-                                  executar=lambda c, d: chamou.append(1) or "000011",
-                                  notificar_fn=lambda ti, tx: None)
+                                  executar=lambda c, d: chamou.append(1) or ExecucaoAnuncio("000011", "1779"),
+                                  notificar_fn=lambda ti, tx: avisos.append((ti, tx)))
             self.assertEqual(r.estado, "duplicado")
             self.assertEqual(r.duv, "000010")
+            self.assertEqual(r.numero_requisicao, "1778")
+            self.assertIn("Requisição nº 1778", avisos[0][1])
             self.assertEqual(chamou, [])
 
     def test_ficha_parada_nao_roda_de_novo(self):
@@ -128,6 +143,20 @@ class TestProcessar(unittest.TestCase):
             servico.processar(root, cfg, executar=lambda c, d: "x", notificar_fn=lambda ti, tx: None)
             r = servico.processar(root, cfg, executar=lambda c, d: "x", notificar_fn=lambda ti, tx: None)
             self.assertEqual(r.estado, "sem_novidade")
+
+    def test_sem_numero_de_requisicao_nao_anuncia_sucesso(self):
+        with TemporaryDirectory() as t:
+            root = self._root_preenchido(t)
+            avisos = []
+            resultado = servico.processar(
+                root, self._cfg(root),
+                executar=lambda c, d: ExecucaoAnuncio("000010"),
+                notificar_fn=lambda titulo, texto: avisos.append((titulo, texto)),
+            )
+            self.assertEqual(resultado.estado, "pendente")
+            self.assertIn("PENDENTE DE CONFERÊNCIA", resultado.mensagem)
+            self.assertEqual(avisos[0][0], "Anúncio pendente de conferência")
+            self.assertTrue((root / "ficha" / "ficha_anuncio_navio.xlsx").exists())
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ def _eta(d: dict) -> str:
     return f"{d.get('eta_data','')} {d.get('eta_hora','')}".strip()
 
 
-def marcar_ok(config, d: dict, duv: str):
+def marcar_ok(config, d: dict, duv: str, *, numero_requisicao: str = ""):
     p = _path(config)
     st = json.loads(p.read_text(encoding="utf-8"))
     st["anuncios"][chave(d)] = {
@@ -35,22 +35,32 @@ def marcar_ok(config, d: dict, duv: str):
         "viagem": d.get("viagem"),
         "eta": _eta(d),
         "duv": duv,
+        "numero_requisicao": numero_requisicao,
     }
     p.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def mesmo_anuncio(config, d: dict) -> str:
-    """DUV ja registrado para o mesmo IMO + ETA; "" quando nao ha."""
+def _registro_mesmo_anuncio(config, d: dict) -> dict:
     p = _path(config)
     st = json.loads(p.read_text(encoding="utf-8"))
     imo = d.get("imo")
     eta = _eta(d)
     if not imo or not eta:
-        return ""
+        return {}
     for anuncio in st.get("anuncios", {}).values():
         if anuncio.get("imo") == imo and anuncio.get("eta") == eta:
-            return anuncio.get("duv") or ""
-    return ""
+            return anuncio
+    return {}
+
+
+def mesmo_anuncio(config, d: dict) -> str:
+    """DUV ja registrado para o mesmo IMO + ETA; "" quando nao ha."""
+    return _registro_mesmo_anuncio(config, d).get("duv") or ""
+
+
+def numero_requisicao_mesmo_anuncio(config, d: dict) -> str:
+    """Numero da requisicao/programacao anterior, quando disponivel."""
+    return _registro_mesmo_anuncio(config, d).get("numero_requisicao") or ""
 
 
 def resumo(config) -> str:
@@ -59,5 +69,8 @@ def resumo(config) -> str:
     n = len(st.get("anuncios", {}))
     if not n:
         return "Nenhum anuncio em status.json."
-    linhas = [f"{k} DUV={v.get('duv')}" for k, v in st["anuncios"].items()]
+    linhas = [
+        f"{k} DUV={v.get('duv')} REQUISICAO={v.get('numero_requisicao', '')}".rstrip()
+        for k, v in st["anuncios"].items()
+    ]
     return f"{n} anuncio(s):\n" + "\n".join(linhas)

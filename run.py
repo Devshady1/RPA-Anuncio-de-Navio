@@ -109,16 +109,19 @@ def main() -> int:
         for p in pendentes:
             try:
                 dados = fila_json.carregar_anuncio(p)  # <- substitui wizard.coletar()
-                duv = executar_um(cfg, dados)          # <- automacao OpenPort inalterada
-                if duv == "duplicado":
+                resultado = executar_um(cfg, dados)
+                if resultado.duv == "duplicado":
                     # barrado pela anti-duplicidade: NAO foi anunciado. Vai para
                     # duplicados/ para nao sumir da fila como se fosse sucesso.
                     fila_json.finalizar_duplicado(p)
                     print(f"DUPLICADO {p.name}: ja anunciado antes (nao processado).")
                     falhas += 1
                 else:
-                    fila_json.finalizar_sucesso(p, duv)  # <- move p/ processados/
-                    print(f"Concluido {p.name}. DUV={duv}")
+                    fila_json.finalizar_sucesso(p, resultado.duv)
+                    print(
+                        f"Concluido {p.name}. Requisicao="
+                        f"{resultado.numero_requisicao} DUV={resultado.duv}"
+                    )
                     ok += 1
             except Exception as e:
                 logger.exception(f"Falha em {p}: {e}")
@@ -148,8 +151,11 @@ def main() -> int:
     if bloqueado_prod(cfg):
         return 2
     try:
-        duv = executar_um(cfg, dados)
-        print(f"\nConcluido. DUV={duv}")
+        resultado = executar_um(cfg, dados)
+        print(
+            f"\nConcluido. Requisicao={resultado.numero_requisicao} "
+            f"(Programacao). DUV={resultado.duv}"
+        )
         return 0
     except Exception as e:
         logger.exception(f"Falha: {e}")

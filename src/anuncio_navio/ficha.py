@@ -150,14 +150,20 @@ def _salvar_atomico(wb, destino: Path) -> None:
 
 
 def escrever_status(path: Path, mensagem: str) -> None:
-    """Grava o veredito em C3 (vermelho) sem tocar no resto da ficha."""
+    """Grava o veredito em C3 com cor de sucesso ou alerta."""
     path = Path(path)
     wb = openpyxl.load_workbook(path)
     ws = wb[ABA_ANUNCIO]
     ws[CELULA_STATUS] = mensagem
-    ws[CELULA_STATUS].font = Font(bold=True, color="9C0006")
-    ws[CELULA_STATUS].fill = PatternFill("solid", fgColor="FFC7CE")
+    confirmado = mensagem.startswith("ANÚNCIO CONFIRMADO")
+    ws[CELULA_STATUS].font = Font(
+        bold=True, color="006100" if confirmado else "9C0006",
+    )
+    ws[CELULA_STATUS].fill = PatternFill(
+        "solid", fgColor="C6EFCE" if confirmado else "FFC7CE",
+    )
     ws[CELULA_STATUS].alignment = Alignment(wrap_text=True)
+    ws.row_dimensions[3].height = max(ws.row_dimensions[3].height or 0, 32)
     _salvar_atomico(wb, path)
 
 
