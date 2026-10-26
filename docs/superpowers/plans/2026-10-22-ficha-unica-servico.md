@@ -806,33 +806,38 @@ git commit -m "feat: modo --servico com trava de instancia unica"
 ### Task 10: Documentação e verificação no QAS
 
 **Files:**
-- Modify: `README.md` (seção nova "Serviço da ficha única"), `memory.md`
+- Modify: `README.md` (seção nova "Serviço da ficha única"), `memory.md`,
+  `ferramentas/gerar_modelo_ficha.py` e modelo gerado
 - Test: nenhum (verificação manual)
 
-- [ ] **Step 1: Documentar**
+- [x] **Step 1: Documentar**
 
 README: layout do deploy (`ficha/`, `data/`, `logs/`, `tmp/`), como rodar em desenvolvimento
 (`python monitor_fila.py --servico --uma-vez` com `ANUNCIO_ROOT` apontando para uma pasta de
 teste), as regras (arquiva/gera nova, ficha parada não roda, duplicado por IMO+ETA) e que o
 instalador macOS é o Plano B.
 
-- [ ] **Step 2: Verificação manual no QAS (sem gravar)**
+- [x] **Step 2: Smoke local isolado (sem browser)**
 
-```powershell
-$t = "$env:TEMP\anuncio_smoke"; New-Item -ItemType Directory -Force $t\ficha | Out-Null
-Copy-Item src\anuncio_navio\recursos\ficha_modelo.xlsx $t\ficha\ficha_anuncio_navio.xlsx
-$env:ANUNCIO_ROOT = $t
-python monitor_fila.py --servico --uma-vez    # esperado: cria a ficha em branco / "invalida"
-```
+Executado em 26/10/2026 com `ANUNCIO_ROOT` em pasta temporária: criou a ficha,
+marcou a ficha vazia como inválida, registrou `historico.csv` e `servico.log`,
+liberou a trava e não chamou `executar_um`.
 
-Preencher a ficha com um caso QAS válido e rodar de novo **sem** `CONFIRMAR_ANUNCIO` (para o robô
-gravar em QAS e parar antes de confirmar; a ficha deve ser arquivada, a nova criada e o
-`data/historico.csv` receber a linha). Conferir `data/json/` e `ficha/arquivo/`.
+- [x] **Step 3: Verificação ponta a ponta no QAS**
 
-- [ ] **Step 3: Commit**
+Executado uma vez em 26/10/2026, com raiz temporária isolada e URL explicitamente
+apontada para QAS. Caso VOYAGER / IMO `9553256`, viagem/DUV `009999`, ETA
+`20/11/2026 07:30`. O fluxo executou Gravar → Verificar → Confirmar; a tela 2001
+confirmou programação `1781`, status `Anunciado`. Verificados resultado `OK`,
+JSON arquivado, histórico/status, ficha processada e ficha seguinte em branco.
+
+O teste confirmou o anúncio e, portanto, deixou um registro persistente no QAS.
+Não reutilizar essa viagem/ETA em novos testes.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add README.md memory.md
+git add README.md memory.md docs/superpowers/plans/2026-10-22-ficha-unica-servico.md ferramentas/gerar_modelo_ficha.py src/anuncio_navio/recursos/ficha_modelo.xlsx tests/test_modelo_ficha.py
 git commit -m "docs: servico da ficha unica (modo --servico)"
 ```
 

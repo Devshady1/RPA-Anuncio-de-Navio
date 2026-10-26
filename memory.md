@@ -3,7 +3,7 @@
 > Raiz do projeto: pasta `rpa-anuncio-navio/` (onde este arquivo está).
 > Em 15/10/2026 o projeto foi preparado para handoff: `.env` removido,
 > geradores movidos para `ferramentas/` com caminhos relativos.
-> Atualizado em: 02/10/2026. Ambiente de trabalho do usuário — **segurança máxima**:
+> Atualizado em: 26/10/2026. Ambiente de trabalho do usuário — **segurança máxima**:
 > nada que abra browser sem autorização explícita; PROD como padrão de operação
 > (testes QAS concluídos em 02/10/2026); QAS via `--ambiente qas`.
 >
@@ -16,11 +16,11 @@
 
 ## 1. O que é
 RPA em Python + Playwright que preenche o **Cadastro/Anúncio de Navio (tela 2003)**
-no OpenPort da CODEBA. Entrada via **JSON na raiz de `dados_rpa/`** (contrato no
-README), **planilha-modelo** ou `wizard.py`; o runner `run.py --fila` consome a fila.
-A interface **Streamlit (`app.py`) foi removida em 02/10/2026** — o novo método de
-inserção de dados que o QA vai definir entra por esse mesmo contrato (JSON na raiz
-de `dados_rpa/`), sem tocar no runner.
+no OpenPort da CODEBA. Entradas suportadas incluem **JSON na raiz de `dados_rpa/`**
+(contrato no README), planilha-modelo e `wizard.py`; `run.py --fila` consome a fila.
+A interface **Streamlit (`app.py`) foi removida em 02/10/2026**. O modo opt-in
+`monitor_fila.py --servico` implementa também o ciclo experimental de ficha única
+(Plano A); a entrega/instalador macOS continua separada e não está implementada.
 
 ## 2. Arquitetura / arquivos
 ```
@@ -319,7 +319,11 @@ Validado com `streamlit.testing.v1.AppTest` (sem browser; o harness mata
   (chegada `10/4` afirmada pelo usuário; `14` m original foi recusado — acima do máximo
   10,527 m) e ETB/ETC/ETS `19/10` pela regra +3 dias — correção manual prevista.
 
-## 10. O que falta p/ rodar liso (TODO priorizado)
+## 10. Pendências históricas do fluxo JSON (status anterior)
+
+> Backlog mantido como registro do fluxo JSON/monitor tradicional. O estado
+> atualizado do serviço de ficha única e suas tarefas de entrega está na seção 14.
+
 0. ✅ **Resolvido em 02/10** — `9553256_000002` reconciliado: entrada criada no
     `status.json` e JSON movido de `erro/` para `processados/` sem tocar no QAS.
 1. ✅ **Resolvido em 02/10** — DUV = viagem foi aceita pelo OpenPort no teste QAS.
@@ -429,3 +433,49 @@ python monitor_fila.py --uma-vez --simular   # teste do monitor sem abrir browse
   17 commits) e a fase tagueada `v0.1.0-fase1`. PROD conferido read-only antes:
   nenhum id divergiu do QAS.
 
+## 14. Estado da entrega da ficha única (26/10/2026)
+
+### Implementado
+
+- As tarefas 1–9 do Plano A foram implementadas em commits de 22–23/10, até
+  `fc8a239` (`monitor_fila.py --servico` com trava de instância). Incluem
+  caminhos do deploy, modelo, leitura/validação, histórico, notificações,
+  ciclo de resultado/arquivo/nova ficha, prevenção de repetição da ficha e
+  modo de serviço.
+- O relatório da tarefa 9 registrou 132 testes aprovados e 4 testes QAS opt-in
+  ignorados em 23/10. Nesta atualização a suíte foi reexecutada: 133 testes
+  aprovados, 4 QAS opt-in ignorados.
+- O modelo de ficha do serviço é gerado por
+  `ferramentas/gerar_modelo_ficha.py` para
+  `src/anuncio_navio/recursos/ficha_modelo.xlsx`.
+
+### Para concluir a Task 10 do Plano A
+
+1. **Documentação e instrução da ficha:** atualizar README e este registro, e
+   remover da aba `COMO PREENCHER` a instrução antiga para devolver o arquivo.
+   Feito nesta atualização; suíte completa aprovada e `git diff --check` aprovado.
+2. **Smoke local isolado:** executar `monitor_fila.py --servico --uma-vez` com
+   `ANUNCIO_ROOT` apontando para uma pasta temporária; confirmar geração e
+   validação local da ficha, `STATUS`, histórico/logs e ausência de navegador.
+   Feito nesta atualização: ficha criada, ficha vazia marcada inválida,
+   `servico.log` escrito e lock liberado; nenhum navegador aberto.
+3. **Teste ponta a ponta no QAS:** concluído uma vez em 26/10/2026 com
+   `CONFIRMAR_ANUNCIO=1` e raiz `ANUNCIO_ROOT` temporária. IMO `9553256`
+   (VOYAGER), viagem/DUV `009999`, ETA `20/11/2026 07:30`: o serviço executou
+   Gravar → Verificar → Confirmar e localizou na tela 2001 a programação
+   `1781`, status `Anunciado`. O ciclo terminou `OK`, arquivou a ficha e o
+   JSON, registrou status/histórico e criou a ficha seguinte. A entrada de
+   teste foi persistida no QAS; não repetir esse mesmo caso.
+4. **Fechamento:** documentação, smoke local e teste QAS foram registrados.
+   Falta somente revisar o diff e fazer o commit da Task 10, se autorizado;
+   nenhum commit foi criado nesta atualização.
+
+### Fora do escopo desta task
+
+- Instalador macOS, LaunchAgent, Keychain, runtime empacotado,
+  `CONFIGURAR.command`, autoatualização e smoke test do instalador pertencem
+  ao Plano B separado. Não há scripts `.command`, `.plist` nem pacote runtime
+  neste repositório.
+- A prova real do serviço no QAS foi uma execução separada da suíte unitária
+  offline e dos testes QAS opt-in existentes, que evitam clicar nos botões de
+  gravação.

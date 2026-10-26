@@ -139,3 +139,51 @@ python limpar_evidencias.py --executar
 - Duplicado vai para `dados_rpa/duplicados/`.
 - Sucesso vai para `dados_rpa/processados/`.
 - `--dry-run` consome a fila sem anunciar.
+
+## Ficha única — serviço em desenvolvimento (Plano A)
+
+Além do fluxo legado `entrada/` → JSON, existe o modo opt-in `--servico`, que
+observa uma única ficha em `ficha/ficha_anuncio_navio.xlsx`. O serviço ainda
+está em validação; o instalador e a configuração de inicialização automática
+do macOS são um Plano B separado e **não estão implementados neste repositório**.
+
+Layout usado pelo serviço sob `ANUNCIO_ROOT`:
+
+```text
+<root>/
+  ficha/ficha_anuncio_navio.xlsx
+  ficha/arquivo/                 # fichas processadas
+  data/                          # status, sequência, histórico e pedidos
+  data/json/                     # JSON de evidência/contrato
+  logs/servico.log
+  logs/servico.lock
+  tmp/                           # reservado no layout de deploy
+  config/.env                    # configuração local do serviço
+```
+
+Em desenvolvimento, `ANUNCIO_ROOT` pode apontar para uma pasta temporária.
+O primeiro ciclo cria uma ficha em branco se ela não existir; a ficha só pode
+ser lida depois de ficar estável por cinco segundos. Para fazer um smoke test
+de criação sem abrir o navegador:
+
+```powershell
+$root = Join-Path $env:TEMP ("anuncio-navio-smoke-" + [guid]::NewGuid().ToString("N"))
+$env:ANUNCIO_ROOT = $root
+python monitor_fila.py --servico --uma-vez
+```
+
+Regras do ciclo:
+
+- Ficha incompleta ou falha: o arquivo permanece na pasta com o motivo em
+  `STATUS`; uma ficha inalterada não é tentada novamente.
+- Sucesso: a ficha preenchida é arquivada e uma nova ficha em branco é criada.
+- Duplicado pelo mesmo IMO e ETA: é arquivado sem anunciar novamente.
+- A ficha deve estar salva e fechada antes do processamento.
+
+O smoke test acima não acessa o OpenPort. A primeira validação ponta a ponta
+do serviço foi executada no QAS em 26/10/2026: o anúncio de teste IMO 9553256,
+viagem/DUV 009999, ETA 20/11/2026 foi confirmado e localizado na tela 2001
+(programação 1781, status `Anunciado`). A execução usou `CONFIRMAR_ANUNCIO=1`,
+pois a verificação padrão só considera sucesso quando encontra esse status.
+Esse registro foi persistido no QAS; não reutilize a mesma viagem/ETA para
+repetir o teste.

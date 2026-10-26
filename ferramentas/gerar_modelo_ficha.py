@@ -2,8 +2,8 @@
 """Gera o modelo da ficha unica a partir de ficha_anuncio_navio.xlsx.
 
 O modelo preserva a aba Anuncio (inclusive a formula da C3), mescla C3:E3
-para a mensagem de STATUS, troca a instrucao final (A29) e cria a aba
-HISTORICO com o cabecalho das fichas processadas.
+para a mensagem de STATUS, atualiza as instrucoes de salvar/fechar e cria a
+aba HISTORICO com o cabecalho das fichas processadas.
 
 Uso:
     python ferramentas/gerar_modelo_ficha.py
@@ -24,9 +24,13 @@ CABECALHO_HISTORICO = (
 INSTRUCAO_FINAL = (
     "\u2714  Preencheu? Salve (Cmd+S) e FECHE \u2014 a ficha nova aparece sozinha."
 )
+INSTRUCAO_A9 = (
+    "Ao terminar: salve (Cmd+S) e feche esta planilha. O rob\u00f4 processa o "
+    "arquivo automaticamente; n\u00e3o \u00e9 necess\u00e1rio devolv\u00ea-lo."
+)
 INSTRUCAO_A10 = (
-    "Ao terminar: salve (Cmd+S) e feche. O rob\u00f4 devolve o resultado na "
-    "linha STATUS e prepara a pr\u00f3xima ficha."
+    "Em caso de erro, o motivo aparece na linha STATUS. Corrija os campos "
+    "indicados e salve novamente."
 )
 
 
@@ -39,6 +43,7 @@ def gerar(origem: Path, destino: Path) -> Path:
     ws["A29"] = INSTRUCAO_FINAL
 
     como = wb["COMO PREENCHER"]
+    como["A9"] = INSTRUCAO_A9
     como["A10"] = INSTRUCAO_A10
     como["A10"].font = copy(como["A9"].font)
     como["A10"].alignment = copy(como["A9"].alignment)

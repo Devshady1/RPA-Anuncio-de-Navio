@@ -22,6 +22,13 @@ class TestModeloFicha(unittest.TestCase):
         ws = openpyxl.load_workbook(MODELO)["Anúncio"]
         self.assertIn("Salve", ws["A29"].value)
 
+    def test_como_preencher_instrui_salvar_e_fechar(self):
+        ws = openpyxl.load_workbook(MODELO)["COMO PREENCHER"]
+        self.assertIn("salve (Cmd+S) e feche", ws["A9"].value)
+        self.assertIn("automaticamente", ws["A9"].value)
+        self.assertNotIn("devolva", ws["A9"].value.lower())
+        self.assertIn("STATUS", ws["A10"].value)
+
     def test_leitor_reconhece_os_rotulos(self):
         campos = planilha.ler_planilha(MODELO)
         for chave in ("nome_navio", "imo", "eta_data", "carga", "agencia", "armador"):
